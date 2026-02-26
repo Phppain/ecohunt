@@ -12,7 +12,7 @@ import PostClean from "./pages/PostClean";
 import MissionStart from "./pages/MissionStart";
 import Leaderboard from "./pages/Leaderboard";
 import Profile from "./pages/Profile";
-import ChatPlaceholder from "./pages/ChatPlaceholder";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,7 +35,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<MapScreen />} />
-              <Route path="/chat" element={<ChatPlaceholder />} />
+              
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/profile" element={<Profile />} />
             </Route>

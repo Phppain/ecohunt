@@ -1,0 +1,62 @@
+import { Map, MessageCircle, Trophy, User, Plus } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+
+const navItems = [
+  { icon: Map, label: 'Map', path: '/' },
+  { icon: MessageCircle, label: 'Chat', path: '/chat' },
+  { icon: null, label: 'Scan', path: '/scan' }, // FAB placeholder
+  { icon: Trophy, label: 'Ranks', path: '/leaderboard' },
+  { icon: User, label: 'Profile', path: '/profile' },
+];
+
+export function BottomNav() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50">
+      {/* FAB */}
+      <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-10">
+        <button
+          onClick={() => navigate('/scan')}
+          className="w-14 h-14 rounded-full eco-gradient eco-shadow-lg flex items-center justify-center text-primary-foreground hover:scale-110 transition-transform active:scale-95"
+        >
+          <Plus className="w-7 h-7" strokeWidth={2.5} />
+        </button>
+      </div>
+
+      {/* Nav bar */}
+      <nav className="bg-card/95 backdrop-blur-xl border-t border-border px-2 pb-safe">
+        <div className="flex items-center justify-around h-16 max-w-md mx-auto">
+          {navItems.map((item, i) => {
+            if (!item.icon) {
+              // Spacer for FAB
+              return <div key={i} className="w-14" />;
+            }
+            const isActive = location.pathname === item.path;
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={cn(
+                  'flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all',
+                  isActive
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Icon className={cn('w-5 h-5', isActive && 'animate-scale-in')} />
+                <span className="text-[10px] font-semibold">{item.label}</span>
+                {isActive && (
+                  <div className="w-1 h-1 rounded-full bg-primary mt-0.5" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    </div>
+  );
+}

@@ -13,10 +13,14 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const mountedRef = useRef(true);
   const hasEverSucceeded = useRef(false);
   const watchIdRef = useRef<number | null>(null);
   const lastPos = useRef<GeoPosition | null>(null);
+  const positionRef = useRef<GeoPosition | null>(null);
+
   const distanceFilter = options?.distanceFilter ?? 5;
+  const enableHighAccuracy = options?.enableHighAccuracy ?? true;
 
   const haversineDistance = (a: GeoPosition, b: GeoPosition) => {
     const R = 6371000;
@@ -28,47 +32,77 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
     return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
   };
 
+  const clearWatch = useCallback(() => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  }, []);
+
   const startWatching = useCallback(() => {
     if (!navigator.geolocation) {
-      setError('Geolocation not supported');
-      setPosition(FALLBACK);
+      if (mountedRef.current) {
+        setError('Geolocation not supported');
+        setPosition(FALLBACK);
+        positionRef.current = FALLBACK;
+      }
       return;
     }
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const newPos: GeoPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
-        if (!lastPos.current || haversineDistance(lastPos.current, newPos) >= distanceFilter) {
-          lastPos.current = newPos;
-          setPosition(newPos);
+    clearWatch();
+
+    try {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          if (!mountedRef.current) return;
+          const newPos: GeoPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+          if (!lastPos.current || haversineDistance(lastPos.current, newPos) >= distanceFilter) {
+            lastPos.current = newPos;
+            positionRef.current = newPos;
+            setPosition(newPos);
+          }
+          setError(null);
+          setPermissionDenied(false);
+          hasEverSucceeded.current = true;
+        },
+        (err) => {
+          if (!mountedRef.current) return;
+          if (err.code === err.PERMISSION_DENIED && !hasEverSucceeded.current) {
+            setPermissionDenied(true);
+          }
+          setError(err.message);
+          if (!positionRef.current) {
+            positionRef.current = FALLBACK;
+            setPosition(FALLBACK);
+          }
+        },
+        { enableHighAccuracy, maximumAge: 5000, timeout: 10000 }
+      );
+    } catch (e) {
+      if (mountedRef.current) {
+        console.warn('Geolocation watch failed:', e);
+        setError('Failed to start geolocation');
+        if (!positionRef.current) {
+          positionRef.current = FALLBACK;
+          setPosition(FALLBACK);
         }
-        setError(null);
-        setPermissionDenied(false);
-        hasEverSucceeded.current = true;
-      },
-      (err) => {
-        // Only show permission modal if we've NEVER gotten a position
-        if (err.code === err.PERMISSION_DENIED && !hasEverSucceeded.current) {
-          setPermissionDenied(true);
-        }
-        setError(err.message);
-        if (!position) setPosition(FALLBACK);
-      },
-      { enableHighAccuracy: options?.enableHighAccuracy ?? true, maximumAge: 5000, timeout: 10000 }
-    );
-  }, [distanceFilter, options?.enableHighAccuracy]);
+      }
+    }
+  }, [distanceFilter, enableHighAccuracy, clearWatch]);
 
   useEffect(() => {
+    mountedRef.current = true;
     startWatching();
     return () => {
-      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+      mountedRef.current = false;
+      clearWatch();
     };
-  }, [startWatching]);
+  }, [startWatching, clearWatch]);
 
   const requestPermission = useCallback(() => {
+    if (!mountedRef.current) return;
     setPermissionDenied(false);
     setError(null);
-    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     startWatching();
   }, [startWatching]);
 

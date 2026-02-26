@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
-import { Leaf, Users, Filter, Layers, MapPin, Navigation } from 'lucide-react';
+import { Users, MapPin, Navigation } from 'lucide-react';
 import { EcoChip } from '@/components/eco/EcoChip';
 import { EcoCard } from '@/components/eco/EcoCard';
 import { supabase } from '@/integrations/supabase/client';
@@ -467,39 +467,7 @@ export default function MapScreen() {
     }
   }, [zones, missions]);
 
-  // Render mission markers (outside zones)
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    missionMarkersRef.current.forEach(m => map.removeLayer(m));
-    missionMarkersRef.current = [];
-
-    missions.filter(m => m.lat !== 0 && m.lng !== 0).forEach(mission => {
-      const marker = L.marker([mission.lat, mission.lng], { icon: missionDivIcon }).addTo(map);
-      const popup = L.popup({ minWidth: 200 });
-      marker.bindPopup(popup);
-      marker.on('popupopen', async () => {
-        popup.setContent('<div style="font-family:system-ui;text-align:center;padding:8px"><span style="color:#94a3b8">Загрузка...</span></div>');
-        const address = await reverseGeocode(mission.lat, mission.lng);
-        const analysis = mission.mission_analysis?.[0];
-        const difficulty = analysis?.difficulty || 'MODERATE';
-        const prob = problemDescriptions[difficulty] || problemDescriptions.MODERATE;
-        const isCleaned = mission.status === 'CLEANED';
-
-        popup.setContent(`
-          <div style="font-family:system-ui;min-width:180px">
-            <strong style="font-size:13px">${mission.title || 'Репорт загрязнения'}</strong>
-            <p style="font-size:11px;color:#64748b;margin:2px 0 6px">📍 ${address}</p>
-            <div style="font-size:11px;padding:6px;border-radius:6px;background:${isCleaned ? '#dcfce7' : '#fef3c7'}">
-              ${isCleaned ? '✅ Убрано' : `${prob.icon} ${prob.label} — ${prob.action}`}
-            </div>
-          </div>
-        `);
-      });
-      missionMarkersRef.current.push(marker);
-    });
-  }, [missions]);
+  // Mission markers removed - spots handle visualization now
 
   const handleRecenter = useCallback(() => {
     mapRef.current?.flyTo([position.lat, position.lng], 15, { duration: 0.8 });
@@ -526,34 +494,13 @@ export default function MapScreen() {
       <div ref={mapContainerRef} className="h-full w-full z-0" />
 
       {/* Top bar */}
-      <div className="absolute top-0 left-0 right-0 z-[1000] p-4 flex items-center justify-between pointer-events-none">
-        <div className="pointer-events-auto flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl eco-gradient flex items-center justify-center">
-              <Leaf className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-foreground text-lg drop-shadow-md">EcoHunt</span>
-          </div>
-          <EcoChip variant="green" className="animate-scale-in w-fit">
+      <div className="absolute top-0 left-0 right-0 z-[1000] p-4 pointer-events-none">
+        <div className="pointer-events-auto w-fit">
+          <EcoChip variant="green" className="animate-scale-in">
             <div className="w-2 h-2 rounded-full bg-eco-green animate-pulse" />
             <Users className="w-3.5 h-3.5" />
             {nearbyUsers.length + 1} users cleaning nearby
           </EcoChip>
-        </div>
-
-        <div className="pointer-events-auto flex flex-col gap-2">
-          <button
-            onClick={() => toast.info('Filter coming soon')}
-            className="w-10 h-10 rounded-xl bg-card/90 backdrop-blur eco-shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Filter className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => toast.info('Layers coming soon')}
-            className="w-10 h-10 rounded-xl bg-card/90 backdrop-blur eco-shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Layers className="w-4 h-4" />
-          </button>
         </div>
       </div>
 

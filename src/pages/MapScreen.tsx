@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap, useMapEvents } from 'react-leaflet';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Leaf, Users, Filter, Layers, Trash2, MapPin, Navigation, Plus } from 'lucide-react';
+import { Leaf, Users, Filter, Layers, MapPin, Navigation } from 'lucide-react';
 import { EcoChip } from '@/components/eco/EcoChip';
 import { EcoCard } from '@/components/eco/EcoCard';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,15 +34,16 @@ const severityColor: Record<string, string> = {
   RED: '#ef4444',
 };
 
-// Custom icons
-const createUserIcon = (label: string, isSelf?: boolean) => L.divIcon({
-  className: '',
-  html: `<div style="width:36px;height:36px;border-radius:50%;background:${isSelf ? 'hsl(142,71%,45%)' : '#fff'};border:3px solid ${isSelf ? '#166534' : 'hsl(142,71%,45%)'};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:${isSelf ? '#fff' : '#166534'};box-shadow:0 2px 8px rgba(0,0,0,0.2)">${label}</div>`,
-  iconSize: [36, 36],
-  iconAnchor: [18, 18],
-});
+function createUserDivIcon(label: string, isSelf?: boolean) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:36px;height:36px;border-radius:50%;background:${isSelf ? 'hsl(142,71%,45%)' : '#fff'};border:3px solid ${isSelf ? '#166534' : 'hsl(142,71%,45%)'};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:${isSelf ? '#fff' : '#166534'};box-shadow:0 2px 8px rgba(0,0,0,0.2)">${label}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+  });
+}
 
-const missionIcon = L.divIcon({
+const missionDivIcon = L.divIcon({
   className: '',
   html: `<div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,hsl(142,71%,45%),hsl(85,60%,50%));display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(34,197,94,0.4)">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
@@ -52,55 +52,122 @@ const missionIcon = L.divIcon({
   iconAnchor: [20, 20],
 });
 
-// Component to recenter map (must be inside MapContainer)
-function RecenterButton({ position }: { position: [number, number] }) {
-  const map = useMap();
-  return (
-    <div className="leaflet-bottom leaflet-right" style={{ marginBottom: '7rem', marginRight: '1rem' }}>
-      <div className="leaflet-control">
-        <button
-          onClick={(e) => { e.stopPropagation(); map.flyTo(position, 15, { duration: 0.8 }); }}
-          className="w-10 h-10 rounded-xl bg-card eco-shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Navigation className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Component to handle map tap for creating missions
-function MapClickHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-// Component to set initial view
-function SetViewOnLoad({ center }: { center: [number, number] }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, 14);
-  }, [center[0], center[1]]);
-  return null;
-}
-
 export default function MapScreen() {
+  const mapRef = useRef<L.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const myMarkerRef = useRef<L.Marker | null>(null);
+  const userMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const missionMarkersRef = useRef<L.Marker[]>([]);
+  const zoneCirclesRef = useRef<L.Circle[]>([]);
+  const initializedRef = useRef(false);
+
   const [zones, setZones] = useState<Zone[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
-  const [tappedLocation, setTappedLocation] = useState<{ lat: number; lng: number } | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
 
   const { position, permissionDenied, requestPermission } = useGeolocation({ enableHighAccuracy: true, distanceFilter: 5 });
-  const { nearbyUsers, cleaningCount } = useNearbyUsers(position);
+  const { nearbyUsers } = useNearbyUsers(position);
 
-  const myCenter: [number, number] = useMemo(() => [position.lat, position.lng], [position.lat, position.lng]);
+  // Initialize map
+  useEffect(() => {
+    if (!mapContainerRef.current || initializedRef.current) return;
+    initializedRef.current = true;
 
-  // Fetch zones & missions
+    const map = L.map(mapContainerRef.current, {
+      center: [position.lat, position.lng],
+      zoom: 14,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', { opacity: 0.7 }).addTo(map);
+
+    // My marker
+    const myMarker = L.marker([position.lat, position.lng], { icon: createUserDivIcon('Me', true) }).addTo(map);
+    myMarker.bindPopup('Вы здесь');
+    myMarkerRef.current = myMarker;
+
+    // Click to create mission
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      if (!user) return;
+      const { lat, lng } = e.latlng;
+      const popup = L.popup()
+        .setLatLng(e.latlng)
+        .setContent(`
+          <div style="text-align:center;font-family:system-ui">
+            <p style="font-size:11px;color:#666;margin:0 0 4px">${lat.toFixed(5)}, ${lng.toFixed(5)}</p>
+            <button id="create-mission-btn" style="font-size:12px;font-weight:700;color:hsl(142,71%,45%);background:none;border:none;cursor:pointer;text-decoration:underline">Create mission here</button>
+          </div>
+        `)
+        .openOn(map);
+
+      setTimeout(() => {
+        const btn = document.getElementById('create-mission-btn');
+        if (btn) {
+          btn.onclick = async () => {
+            const { error } = await supabase.from('missions').insert({
+              lat, lng, creator_id: user.id, title: 'New cleanup mission',
+            });
+            if (error) toast.error('Failed to create mission');
+            else {
+              toast.success('Mission created!');
+              map.closePopup();
+              const { data } = await supabase.from('missions').select('*').limit(50);
+              if (data) setMissions(data as Mission[]);
+            }
+          };
+        }
+      }, 50);
+    });
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      initializedRef.current = false;
+    };
+  }, []);
+
+  // Update my position
+  useEffect(() => {
+    if (myMarkerRef.current) {
+      myMarkerRef.current.setLatLng([position.lat, position.lng]);
+    }
+  }, [position.lat, position.lng]);
+
+  // Update nearby user markers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const currentIds = new Set(nearbyUsers.map(u => u.user_id));
+
+    // Remove gone users
+    userMarkersRef.current.forEach((marker, id) => {
+      if (!currentIds.has(id)) {
+        map.removeLayer(marker);
+        userMarkersRef.current.delete(id);
+      }
+    });
+
+    // Add/update users
+    nearbyUsers.forEach(u => {
+      const existing = userMarkersRef.current.get(u.user_id);
+      if (existing) {
+        existing.setLatLng([u.lat, u.lng]);
+      } else {
+        const marker = L.marker([u.lat, u.lng], {
+          icon: createUserDivIcon(u.username.charAt(0).toUpperCase()),
+        }).addTo(map);
+        marker.bindPopup(`<strong>${u.username}</strong><br/>${u.is_cleaning ? '🧹 Cleaning' : 'Online'}`);
+        userMarkersRef.current.set(u.user_id, marker);
+      }
+    });
+  }, [nearbyUsers]);
+
+  // Fetch & render zones & missions
   useEffect(() => {
     const fetchData = async () => {
       const [zonesRes, missionsRes] = await Promise.all([
@@ -115,34 +182,50 @@ export default function MapScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleMapClick = useCallback((lat: number, lng: number) => {
-    setTappedLocation({ lat, lng });
-  }, []);
+  // Render zones on map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
 
-  const handleCreateMission = useCallback(async () => {
-    if (!tappedLocation || !user) return;
-    const { error } = await supabase.from('missions').insert({
-      lat: tappedLocation.lat,
-      lng: tappedLocation.lng,
-      creator_id: user.id,
-      title: 'New cleanup mission',
+    zoneCirclesRef.current.forEach(c => map.removeLayer(c));
+    zoneCirclesRef.current = [];
+
+    zones.forEach(zone => {
+      const circle = L.circle([zone.center_lat, zone.center_lng], {
+        radius: zone.radius_m,
+        color: severityColor[zone.severity],
+        fillColor: severityColor[zone.severity],
+        fillOpacity: 0.25,
+        weight: 2,
+        opacity: 0.6,
+      }).addTo(map);
+      circle.bindPopup(`<strong>${zone.name}</strong><br/>Severity: ${zone.severity}`);
+      zoneCirclesRef.current.push(circle);
     });
-    if (error) {
-      toast.error('Failed to create mission');
-    } else {
-      toast.success('Mission created!');
-      setTappedLocation(null);
-      // Refresh missions
-      const { data } = await supabase.from('missions').select('*').limit(50);
-      if (data) setMissions(data as Mission[]);
-    }
-  }, [tappedLocation, user]);
+  }, [zones]);
 
-  const myIcon = useMemo(() => createUserIcon('Me', true), []);
+  // Render missions on map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    missionMarkersRef.current.forEach(m => map.removeLayer(m));
+    missionMarkersRef.current = [];
+
+    missions.forEach(mission => {
+      const marker = L.marker([mission.lat, mission.lng], { icon: missionDivIcon }).addTo(map);
+      marker.bindPopup(`<strong>${mission.title || 'Cleanup Mission'}</strong><br/>Status: ${mission.status}`);
+      marker.on('click', () => {});
+      missionMarkersRef.current.push(marker);
+    });
+  }, [missions]);
+
+  const handleRecenter = useCallback(() => {
+    mapRef.current?.flyTo([position.lat, position.lng], 15, { duration: 0.8 });
+  }, [position.lat, position.lng]);
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
-      {/* Permission denied overlay */}
       {permissionDenied && (
         <div className="absolute inset-0 z-[2000] bg-background/80 backdrop-blur-sm flex items-center justify-center p-6">
           <EcoCard variant="elevated" className="max-w-sm text-center p-6">
@@ -158,110 +241,8 @@ export default function MapScreen() {
         </div>
       )}
 
-      {/* Leaflet Map */}
-      <MapContainer
-        center={myCenter}
-        zoom={14}
-        className="h-full w-full z-0"
-        zoomControl={false}
-        attributionControl={false}
-      >
-        <SetViewOnLoad center={myCenter} />
-        <TileLayer
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        />
-        {/* Semi-transparent labels overlay */}
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
-          opacity={0.7}
-        />
-
-        <MapClickHandler onMapClick={handleMapClick} />
-
-        {/* Zones as colored circles */}
-        {zones.map(zone => (
-          <Circle
-            key={zone.id}
-            center={[zone.center_lat, zone.center_lng]}
-            radius={zone.radius_m}
-            pathOptions={{
-              color: severityColor[zone.severity],
-              fillColor: severityColor[zone.severity],
-              fillOpacity: 0.25,
-              weight: 2,
-              opacity: 0.6,
-            }}
-          >
-            <Popup>
-              <strong>{zone.name}</strong><br />
-              Severity: {zone.severity}
-            </Popup>
-          </Circle>
-        ))}
-
-        {/* Missions */}
-        {missions.map(mission => (
-          <Marker key={mission.id} position={[mission.lat, mission.lng]} icon={missionIcon}>
-            <Popup>
-              <strong>{mission.title || 'Cleanup Mission'}</strong><br />
-              Status: {mission.status}<br />
-              <button
-                className="mt-1 text-xs font-semibold text-primary underline"
-                onClick={() => navigate('/scan')}
-              >
-                Start cleaning →
-              </button>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* My position */}
-        <Marker position={myCenter} icon={myIcon}>
-          <Popup>Вы здесь</Popup>
-        </Marker>
-
-        {/* Nearby users */}
-        {nearbyUsers.map(u => (
-          <Marker
-            key={u.user_id}
-            position={[u.lat, u.lng]}
-            icon={createUserIcon(u.username.charAt(0).toUpperCase())}
-          >
-            <Popup>
-              <strong>{u.username}</strong><br />
-              {u.is_cleaning ? '🧹 Cleaning now' : 'Online'}
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Tapped location marker */}
-        {tappedLocation && (
-          <Marker
-            position={[tappedLocation.lat, tappedLocation.lng]}
-            icon={L.divIcon({
-              className: '',
-              html: `<div style="width:24px;height:24px;border-radius:50%;background:hsl(142,71%,45%);border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>`,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12],
-            })}
-          >
-            <Popup>
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-1">
-                  {tappedLocation.lat.toFixed(5)}, {tappedLocation.lng.toFixed(5)}
-                </p>
-                <button
-                  onClick={handleCreateMission}
-                  className="text-xs font-bold text-primary underline"
-                >
-                  Create mission here
-                </button>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-        <RecenterButton position={myCenter} />
-      </MapContainer>
+      {/* Map container */}
+      <div ref={mapContainerRef} className="h-full w-full z-0" />
 
       {/* Top bar */}
       <div className="absolute top-0 left-0 right-0 z-[1000] p-4 flex items-center justify-between pointer-events-none">
@@ -279,7 +260,6 @@ export default function MapScreen() {
           </EcoChip>
         </div>
 
-        {/* Right controls */}
         <div className="pointer-events-auto flex flex-col gap-2">
           <button
             onClick={() => toast.info('Filter coming soon')}
@@ -296,6 +276,13 @@ export default function MapScreen() {
         </div>
       </div>
 
+      {/* Recenter button */}
+      <button
+        onClick={handleRecenter}
+        className="absolute bottom-28 right-4 z-[1000] w-10 h-10 rounded-xl bg-card/90 backdrop-blur eco-shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Navigation className="w-4 h-4" />
+      </button>
 
       {/* Bottom zone summary */}
       <div className="absolute bottom-20 left-4 right-4 z-[1000]">

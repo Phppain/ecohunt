@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.heat';
 import { Leaf, Users, Filter, Layers, MapPin, Navigation } from 'lucide-react';
 import { EcoChip } from '@/components/eco/EcoChip';
 import { EcoCard } from '@/components/eco/EcoCard';
@@ -10,6 +11,7 @@ import { useGeolocation } from '@/hooks/use-geolocation';
 import { useNearbyUsers } from '@/hooks/use-nearby-users';
 import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
+import { CityProgressCard } from '@/components/map/CityProgressCard';
 
 interface Zone {
   id: string;
@@ -59,6 +61,7 @@ export default function MapScreen() {
   const userMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const missionMarkersRef = useRef<L.Marker[]>([]);
   const zoneCirclesRef = useRef<L.Circle[]>([]);
+  const heatLayerRef = useRef<L.Layer | null>(null);
   const initializedRef = useRef(false);
 
   const [zones, setZones] = useState<Zone[]>([]);
@@ -174,7 +177,7 @@ export default function MapScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Render zones on map
+  // Render zones + heatmap on map
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -182,19 +185,75 @@ export default function MapScreen() {
     zoneCirclesRef.current.forEach(c => map.removeLayer(c));
     zoneCirclesRef.current = [];
 
+    if (heatLayerRef.current) {
+      map.removeLayer(heatLayerRef.current);
+      heatLayerRef.current = null;
+    }
+
+    // Build heatmap points from zones
+    const severityIntensity: Record<string, number> = { GREEN: 0.25, YELLOW: 0.55, RED: 0.9 };
+    const heatPoints: [number, number, number][] = [];
+
     zones.forEach(zone => {
+      // Add zone circles (subtle)
       const circle = L.circle([zone.center_lat, zone.center_lng], {
         radius: zone.radius_m,
         color: severityColor[zone.severity],
         fillColor: severityColor[zone.severity],
-        fillOpacity: 0.25,
-        weight: 2,
-        opacity: 0.6,
+        fillOpacity: 0.1,
+        weight: 1,
+        opacity: 0.3,
+        dashArray: '4 6',
       }).addTo(map);
       circle.bindPopup(`<strong>${zone.name}</strong><br/>Severity: ${zone.severity}`);
       zoneCirclesRef.current.push(circle);
+
+      // Generate heatmap points around zone center
+      const intensity = severityIntensity[zone.severity] ?? 0.5;
+      const numPoints = Math.ceil((zone.radius_m / 50) * (intensity * 3));
+      for (let i = 0; i < numPoints; i++) {
+        const angle = Math.random() * 2 * Math.PI;
+        const r = Math.random() * (zone.radius_m / 111000); // degrees approx
+        const lat = zone.center_lat + r * Math.cos(angle);
+        const lng = zone.center_lng + r * Math.sin(angle) / Math.cos(zone.center_lat * Math.PI / 180);
+        heatPoints.push([lat, lng, intensity]);
+      }
     });
-  }, [zones]);
+
+    // Reduce heat near cleaned missions (visual improvement)
+    missions.filter(m => m.status === 'CLEANED').forEach(m => {
+      heatPoints.push([m.lat, m.lng, -0.3]);
+    });
+
+    // Add uncleaned mission locations as hot spots
+    missions.filter(m => m.status !== 'CLEANED').forEach(m => {
+      if (m.lat !== 0 && m.lng !== 0) {
+        heatPoints.push([m.lat, m.lng, 0.7]);
+      }
+    });
+
+    if (heatPoints.length > 0) {
+      const heat = L.heatLayer(
+        heatPoints.filter(p => p[2] > 0),
+        {
+          radius: 30,
+          blur: 20,
+          maxZoom: 17,
+          max: 1,
+          minOpacity: 0.15,
+          gradient: {
+            0.1: '#10b981',
+            0.3: '#fbbf24',
+            0.5: '#f97316',
+            0.7: '#ef4444',
+            0.9: '#dc2626',
+            1.0: '#991b1b',
+          },
+        }
+      ).addTo(map);
+      heatLayerRef.current = heat;
+    }
+  }, [zones, missions]);
 
   // Render missions on map
   useEffect(() => {
@@ -276,27 +335,14 @@ export default function MapScreen() {
         <Navigation className="w-4 h-4" />
       </button>
 
-      {/* Bottom zone summary */}
+      {/* Bottom progress card */}
       <div className="absolute bottom-20 left-4 right-4 z-[1000]">
-        <EcoCard variant="glass" className="p-3">
-          <div className="flex items-center gap-3">
-            <MapPin className="w-5 h-5 text-primary" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">{zones.length} Active Zones</p>
-              <p className="text-xs text-muted-foreground">{missions.length} missions available</p>
-            </div>
-            <div className="flex gap-1.5">
-              {(['GREEN', 'YELLOW', 'RED'] as const).map(s => (
-                <div key={s} className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-full" style={{ background: severityColor[s] }} />
-                  <span className="text-xs text-muted-foreground">
-                    {zones.filter(z => z.severity === s).length}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </EcoCard>
+        <CityProgressCard
+          totalMissions={missions.length}
+          cleanedMissions={missions.filter(m => m.status === 'CLEANED').length}
+          zonesCount={zones.length}
+          improvementPct={missions.length > 0 ? Math.round((missions.filter(m => m.status === 'CLEANED').length / missions.length) * 100) : 0}
+        />
       </div>
     </div>
   );

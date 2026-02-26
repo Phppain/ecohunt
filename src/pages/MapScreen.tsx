@@ -28,6 +28,7 @@ interface Mission {
   lng: number;
   title: string | null;
   status: string;
+  zone_id: string | null;
 }
 
 const severityColor: Record<string, string> = {
@@ -61,6 +62,7 @@ export default function MapScreen() {
   const userMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const missionMarkersRef = useRef<L.Marker[]>([]);
   const zoneCirclesRef = useRef<L.Circle[]>([]);
+  const zoneLabelLayersRef = useRef<L.Marker[]>([]);
   const heatLayerRef = useRef<L.Layer | null>(null);
   const initializedRef = useRef(false);
 
@@ -184,48 +186,93 @@ export default function MapScreen() {
 
     zoneCirclesRef.current.forEach(c => map.removeLayer(c));
     zoneCirclesRef.current = [];
+    zoneLabelLayersRef.current.forEach(l => map.removeLayer(l));
+    zoneLabelLayersRef.current = [];
 
     if (heatLayerRef.current) {
       map.removeLayer(heatLayerRef.current);
       heatLayerRef.current = null;
     }
 
-    // Build heatmap points from zones
     const severityIntensity: Record<string, number> = { GREEN: 0.25, YELLOW: 0.55, RED: 0.9 };
+    const severityEmoji: Record<string, string> = { GREEN: '✅', YELLOW: '⚠️', RED: '🔴' };
     const heatPoints: [number, number, number][] = [];
 
     zones.forEach(zone => {
-      // Add zone circles (subtle)
+      // Calculate per-zone progress
+      const zoneMissions = missions.filter(m => m.zone_id === zone.id);
+      const cleaned = zoneMissions.filter(m => m.status === 'CLEANED').length;
+      const total = zoneMissions.length;
+      const pct = total > 0 ? Math.round((cleaned / total) * 100) : 0;
+
       const circle = L.circle([zone.center_lat, zone.center_lng], {
         radius: zone.radius_m,
         color: severityColor[zone.severity],
         fillColor: severityColor[zone.severity],
-        fillOpacity: 0.1,
-        weight: 1,
-        opacity: 0.3,
-        dashArray: '4 6',
+        fillOpacity: zone.severity === 'RED' ? 0.18 : zone.severity === 'YELLOW' ? 0.12 : 0.08,
+        weight: 2,
+        opacity: 0.6,
       }).addTo(map);
-      circle.bindPopup(`<strong>${zone.name}</strong><br/>Severity: ${zone.severity}`);
+
+      const popupHtml = `
+        <div style="font-family:system-ui;min-width:160px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="font-size:18px">${severityEmoji[zone.severity]}</span>
+            <strong style="font-size:14px">${zone.name}</strong>
+          </div>
+          <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px">
+              <span>Убрано</span>
+              <span style="font-weight:700;color:${pct >= 70 ? '#16a34a' : pct >= 30 ? '#ca8a04' : '#dc2626'}">${pct}%</span>
+            </div>
+            <div style="height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#22c55e,#16a34a);border-radius:3px"></div>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:3px">${cleaned} из ${total} миссий выполнено</div>
+          </div>
+          <div style="font-size:11px;color:#94a3b8">Осталось: <strong style="color:#334155">${total - cleaned}</strong></div>
+        </div>
+      `;
+      circle.bindPopup(popupHtml);
       zoneCirclesRef.current.push(circle);
 
-      // Generate heatmap points around zone center
+      // Floating label with cleanup %
+      const labelIcon = L.divIcon({
+        className: '',
+        html: `<div style="
+          background:${severityColor[zone.severity]}${zone.severity === 'RED' ? 'dd' : 'cc'};
+          color:#fff;font-weight:800;font-size:13px;
+          padding:4px 10px;border-radius:20px;
+          white-space:nowrap;text-align:center;
+          box-shadow:0 2px 8px rgba(0,0,0,0.3);
+          border:2px solid rgba(255,255,255,0.5);
+          display:flex;align-items:center;gap:4px;
+        ">
+          <span style="font-size:11px">${severityEmoji[zone.severity]}</span>
+          ${pct}% убрано
+        </div>`,
+        iconAnchor: [50, 12],
+      });
+      const label = L.marker([zone.center_lat, zone.center_lng], { icon: labelIcon, interactive: false }).addTo(map);
+      zoneLabelLayersRef.current.push(label);
+
+      // Heatmap — reduce intensity based on cleanup
       const intensity = severityIntensity[zone.severity] ?? 0.5;
-      const numPoints = Math.ceil((zone.radius_m / 50) * (intensity * 3));
+      const adjustedIntensity = intensity * (1 - pct / 100 * 0.7);
+      const numPoints = Math.ceil((zone.radius_m / 50) * (adjustedIntensity * 3));
       for (let i = 0; i < numPoints; i++) {
         const angle = Math.random() * 2 * Math.PI;
-        const r = Math.random() * (zone.radius_m / 111000); // degrees approx
+        const r = Math.random() * (zone.radius_m / 111000);
         const lat = zone.center_lat + r * Math.cos(angle);
         const lng = zone.center_lng + r * Math.sin(angle) / Math.cos(zone.center_lat * Math.PI / 180);
-        heatPoints.push([lat, lng, intensity]);
+        heatPoints.push([lat, lng, adjustedIntensity]);
       }
     });
 
-    // Reduce heat near cleaned missions (visual improvement)
     missions.filter(m => m.status === 'CLEANED').forEach(m => {
       heatPoints.push([m.lat, m.lng, -0.3]);
     });
 
-    // Add uncleaned mission locations as hot spots
     missions.filter(m => m.status !== 'CLEANED').forEach(m => {
       if (m.lat !== 0 && m.lng !== 0) {
         heatPoints.push([m.lat, m.lng, 0.7]);

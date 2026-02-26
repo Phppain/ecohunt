@@ -483,9 +483,14 @@ export default function MapScreen() {
             <p className="text-sm text-muted-foreground mb-4">
               Чтобы видеть карту и других пользователей рядом, разрешите доступ к местоположению.
             </p>
-            <button onClick={requestPermission} className="eco-gradient text-primary-foreground px-6 py-2 rounded-xl font-semibold">
-              Включить геолокацию
-            </button>
+            <div className="flex flex-col gap-2">
+              <button onClick={requestPermission} className="eco-gradient text-primary-foreground px-6 py-2 rounded-xl font-semibold">
+                Включить геолокацию
+              </button>
+              <button onClick={() => requestPermission()} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Продолжить без геолокации
+              </button>
+            </div>
           </EcoCard>
         </div>
       )}

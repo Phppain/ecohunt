@@ -4,6 +4,7 @@ import { EcoButton } from '@/components/eco/EcoButton';
 import { EcoCard } from '@/components/eco/EcoCard';
 import { Leaf, Mail, Lock, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import logo from '@/assets/logo.jpeg';
 
 export default function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -38,9 +39,7 @@ export default function Auth() {
       <div className="w-full max-w-sm animate-slide-up">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl eco-gradient mb-4">
-            <Leaf className="w-8 h-8 text-primary-foreground" />
-          </div>
+          <img src={logo} alt="EcoHunt" className="w-20 h-20 rounded-full object-cover mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-foreground">EcoHunt</h1>
           <p className="text-muted-foreground text-sm mt-1">Clean the planet, earn rewards</p>
         </div>

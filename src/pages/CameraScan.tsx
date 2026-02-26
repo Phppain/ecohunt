@@ -5,6 +5,7 @@ import { EcoCard } from '@/components/eco/EcoCard';
 import { EcoChip } from '@/components/eco/EcoChip';
 import { EcoButton } from '@/components/eco/EcoButton';
 import { runBeforeScan, type ScanResult } from '@/lib/mock-detection';
+import logo from '@/assets/logo.jpeg';
 
 const tabs = ['Object Classification', 'Severity', 'Impact'];
 
@@ -26,6 +27,7 @@ export default function CameraScan() {
     <div className="min-h-screen bg-foreground relative">
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 p-4 flex items-center gap-3">
+        <img src={logo} alt="EcoHunt" className="w-8 h-8 rounded-full object-cover" />
         <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-card/20 backdrop-blur flex items-center justify-center text-primary-foreground">
           <ArrowLeft className="w-5 h-5" />
         </button>

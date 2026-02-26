@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Trophy, Crown, Medal, Star, Gift } from 'lucide-react';
 import { EcoCard } from '@/components/eco/EcoCard';
 import { EcoChip } from '@/components/eco/EcoChip';
+import logo from '@/assets/logo.jpeg';
 
 const periods = ['Daily', 'Weekly', 'Monthly', 'Event'];
 

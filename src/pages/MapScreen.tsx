@@ -207,11 +207,11 @@ export default function MapScreen() {
 
       const circle = L.circle([zone.center_lat, zone.center_lng], {
         radius: zone.radius_m,
-        color: 'transparent',
-        fillColor: 'transparent',
-        fillOpacity: 0,
-        weight: 0,
-        opacity: 0,
+        color: severityColor[zone.severity],
+        fillColor: severityColor[zone.severity],
+        fillOpacity: zone.severity === 'RED' ? 0.18 : zone.severity === 'YELLOW' ? 0.12 : 0.08,
+        weight: 2,
+        opacity: 0.6,
       }).addTo(map);
 
       const popupHtml = `
@@ -236,24 +236,6 @@ export default function MapScreen() {
       circle.bindPopup(popupHtml);
       zoneCirclesRef.current.push(circle);
 
-      // Floating label with cleanup %
-      const labelIcon = L.divIcon({
-        className: '',
-        html: `<div style="
-          background:${severityColor[zone.severity]}${zone.severity === 'RED' ? 'dd' : 'cc'};
-          color:#fff;font-weight:800;font-size:13px;
-          padding:4px 10px;border-radius:20px;
-          white-space:nowrap;text-align:center;
-          box-shadow:0 2px 8px rgba(0,0,0,0.3);
-          border:2px solid rgba(255,255,255,0.5);
-          display:flex;align-items:center;gap:4px;
-        ">
-          ${pct}/100
-        </div>`,
-        iconAnchor: [50, 12],
-      });
-      const label = L.marker([zone.center_lat, zone.center_lng], { icon: labelIcon, interactive: false }).addTo(map);
-      zoneLabelLayersRef.current.push(label);
 
       // Heatmap — reduce intensity based on cleanup
       const intensity = severityIntensity[zone.severity] ?? 0.5;

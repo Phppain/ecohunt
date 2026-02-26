@@ -48,6 +48,28 @@ const problemDescriptions: Record<string, { icon: string; label: string; action:
   EASY: { icon: '📦', label: 'Разбросанный мусор', action: 'Можно убрать одному за 15-30 минут' },
 };
 
+const detailedProblems = [
+  { icon: '🛢️', label: 'Слив отходов', detail: 'Обнаружены следы слива жидких отходов. Почва загрязнена, есть запах химикатов.', action: 'Вызвать экологическую инспекцию. Нужен отбор проб воды и почвы.' },
+  { icon: '🗑️', label: 'Бытовой мусор', detail: 'Пакеты с бытовым мусором, пластиковые бутылки, упаковки от еды.', action: 'Собрать в мешки и вывезти. Понадобится 2-3 волонтёра на 1 час.' },
+  { icon: '🚗', label: 'Автомобильные отходы', detail: 'Старые шины, канистры с маслом, автозапчасти. Возможно загрязнение почвы.', action: 'Нужен грузовой транспорт для вывоза. Шины сдать на переработку.' },
+  { icon: '🏗️', label: 'Строительный мусор', detail: 'Обломки бетона, арматура, куски гипсокартона, строительная пыль.', action: 'Требуется контейнер для строймусора и спецтехника.' },
+  { icon: '🌿', label: 'Заросли и завалы', detail: 'Территория завалена ветками, старой листвой. Возможно укрытие для грызунов.', action: 'Расчистить территорию. Нужны грабли, пилы, мешки для зелёных отходов.' },
+  { icon: '🧴', label: 'Пластиковое загрязнение', detail: 'Большое количество пластика: бутылки, пакеты, одноразовая посуда.', action: 'Сортировка и сбор пластика. Сдать на переработку в ближайший пункт.' },
+  { icon: '📱', label: 'Электронные отходы', detail: 'Выброшенная электроника: платы, провода, батарейки. Токсичные вещества!', action: 'Аккуратно собрать в отдельные контейнеры. Сдать в пункт утилизации э-отходов.' },
+  { icon: '🍔', label: 'Пищевые отходы', detail: 'Гниющие пищевые отходы, привлекающие животных и насекомых.', action: 'Убрать и обработать территорию. Установить контейнер для органики.' },
+  { icon: '🪵', label: 'Незаконная вырубка', detail: 'Свежие пни, спиленные деревья без разрешения. Нарушение экологии.', action: 'Сообщить в экологическую полицию. Зафиксировать GPS-координаты и фото.' },
+  { icon: '💧', label: 'Загрязнение воды', detail: 'Мусор в водоёме/арыке. Пластик, бутылки, пятна нефтепродуктов на поверхности.', action: 'Организовать очистку береговой линии. Установить защитные сетки.' },
+];
+
+// Seeded random for consistent spot generation per zone
+function seededRandom(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 16807 + 0) % 2147483647;
+    return s / 2147483647;
+  };
+}
+
 function findNearestZone(lat: number, lng: number, zones: Zone[]): Zone | null {
   let nearest: Zone | null = null;
   let minDist = Infinity;
@@ -287,7 +309,7 @@ export default function MapScreen() {
       zoneCirclesRef.current.push(circle);
 
 
-      // Place real mission spots inside this zone
+      // === Real mission spots ===
       const matchedMissions = missions.filter(m => {
         if (m.lat === 0 && m.lng === 0) return false;
         if (m.zone_id === zone.id) return true;
@@ -304,61 +326,102 @@ export default function MapScreen() {
 
         const spot = L.circleMarker([mission.lat, mission.lng], {
           radius: isCleaned ? 8 : (difficulty === 'HARD' ? 16 : difficulty === 'MODERATE' ? 12 : 9),
-          color: spotColor,
-          fillColor: spotColor,
+          color: spotColor, fillColor: spotColor,
           fillOpacity: isCleaned ? 0.25 : 0.55,
           weight: isCleaned ? 1 : 2.5,
           opacity: isCleaned ? 0.4 : 0.8,
         });
 
-        // Lazy-loaded popup with reverse geocoding
-        const popup = L.popup({ minWidth: 200 });
+        const popup = L.popup({ minWidth: 220 });
         spot.bindPopup(popup);
         spot.on('popupopen', async () => {
-          popup.setContent('<div style="font-family:system-ui;text-align:center;padding:8px"><span style="color:#94a3b8">Загрузка...</span></div>');
+          popup.setContent('<div style="font-family:system-ui;text-align:center;padding:12px"><span style="color:#94a3b8">📍 Определяем адрес...</span></div>');
           const address = await reverseGeocode(mission.lat, mission.lng);
           const itemsBefore = analysis?.items_before ?? '—';
-          const itemsAfter = analysis?.items_after ?? '—';
           const wasteDiverted = analysis?.waste_diverted_kg?.toFixed(1) ?? '—';
 
           popup.setContent(`
-            <div style="font-family:system-ui;min-width:200px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span style="font-size:20px">${isCleaned ? '✅' : prob.icon}</span>
+            <div style="font-family:system-ui;min-width:220px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                <span style="font-size:22px">${isCleaned ? '✅' : prob.icon}</span>
                 <div>
                   <strong style="font-size:13px;display:block">${isCleaned ? 'Убрано!' : prob.label}</strong>
-                  <span style="font-size:11px;color:#64748b">${address}</span>
+                  <span style="font-size:11px;color:#64748b">📍 ${address}</span>
                 </div>
               </div>
               <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:6px">
-                <div style="font-size:11px;color:#64748b;margin-bottom:4px">📊 Детали</div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
-                  <div>До: <strong>${itemsBefore}</strong> предметов</div>
-                  <div>После: <strong>${itemsAfter}</strong> предметов</div>
-                  <div>Вывезено: <strong>${wasteDiverted}</strong> кг</div>
-                  <div>Сложность: <strong>${difficulty === 'HARD' ? '🔴 Высокая' : difficulty === 'MODERATE' ? '🟡 Средняя' : '🟢 Лёгкая'}</strong></div>
+                  <div>Предметов: <strong>${itemsBefore}</strong></div>
+                  <div>Вывезено: <strong>${wasteDiverted} кг</strong></div>
                 </div>
+              </div>
+              ${!isCleaned ? `<div style="background:#fef3c7;border-radius:8px;padding:8px;font-size:11px"><strong style="color:#92400e">🛠 ${prob.action}</strong></div>` : `<div style="background:#dcfce7;border-radius:8px;padding:8px;font-size:11px;color:#166534">✨ Проблема решена!</div>`}
+            </div>
+          `);
+        });
+
+        if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
+      });
+
+      // === Generated zone spots with unique locations & descriptions ===
+      const spotCount = Math.max(4, Math.ceil(zone.radius_m / 70));
+      const rng = seededRandom(zone.center_lat * 1000000 + zone.center_lng * 1000);
+
+      for (let i = 0; i < spotCount; i++) {
+        const angle = rng() * 2 * Math.PI;
+        const dist = rng() * 0.85;
+        const spotLat = zone.center_lat + (dist * zone.radius_m / 111000) * Math.cos(angle);
+        const spotLng = zone.center_lng + (dist * zone.radius_m / 111000) * Math.sin(angle) / Math.cos(zone.center_lat * Math.PI / 180);
+        const isCleaned = rng() < (pct / 100);
+        const problemIdx = Math.floor(rng() * detailedProblems.length);
+        const problem = detailedProblems[problemIdx];
+        const spotColor = isCleaned ? '#22c55e' : severityColor[zone.severity];
+        const spotRadius = 6 + rng() * 10;
+
+        const spot = L.circleMarker([spotLat, spotLng], {
+          radius: spotRadius,
+          color: spotColor, fillColor: spotColor,
+          fillOpacity: isCleaned ? 0.2 : 0.5,
+          weight: isCleaned ? 1 : 2,
+          opacity: isCleaned ? 0.3 : 0.7,
+        });
+
+        const popup = L.popup({ minWidth: 220 });
+        spot.bindPopup(popup);
+        spot.on('popupopen', async () => {
+          popup.setContent('<div style="font-family:system-ui;text-align:center;padding:12px"><span style="color:#94a3b8">📍 Определяем адрес...</span></div>');
+          const address = await reverseGeocode(spotLat, spotLng);
+
+          popup.setContent(`
+            <div style="font-family:system-ui;min-width:220px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                <span style="font-size:22px">${isCleaned ? '✅' : problem.icon}</span>
+                <div>
+                  <strong style="font-size:13px;display:block">${isCleaned ? 'Убрано!' : problem.label}</strong>
+                  <span style="font-size:11px;color:#64748b">📍 ${address}</span>
+                </div>
+              </div>
+              <div style="background:#f8fafc;border-radius:8px;padding:8px;margin-bottom:6px">
+                <p style="font-size:11px;color:#475569;margin:0;line-height:1.4">${isCleaned ? 'Территория очищена волонтёрами. Мусор вывезен и утилизирован.' : problem.detail}</p>
               </div>
               ${!isCleaned ? `
                 <div style="background:#fef3c7;border-radius:8px;padding:8px;font-size:11px">
-                  <strong style="color:#92400e">🛠 Что нужно:</strong>
-                  <p style="color:#78350f;margin:2px 0 0">${prob.action}</p>
+                  <strong style="color:#92400e">🛠 Что нужно сделать:</strong>
+                  <p style="color:#78350f;margin:4px 0 0;line-height:1.3">${problem.action}</p>
                 </div>
               ` : `
                 <div style="background:#dcfce7;border-radius:8px;padding:8px;font-size:11px;color:#166534">
-                  ✨ Проблема решена! Спасибо волонтёрам.
+                  ✨ Спасибо волонтёрам за чистый город!
                 </div>
               `}
             </div>
           `);
         });
 
-        if (pollutionSpotsRef.current) {
-          pollutionSpotsRef.current.addLayer(spot);
-        }
-      });
+        if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
+      }
 
-      // Heatmap — reduce intensity based on cleanup
+      // Heatmap
       const intensity = severityIntensity[zone.severity] ?? 0.5;
       const adjustedIntensity = intensity * (1 - pct / 100 * 0.7);
       const numPoints = Math.ceil((zone.radius_m / 50) * (adjustedIntensity * 3));

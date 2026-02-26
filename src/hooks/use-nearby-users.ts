@@ -39,25 +39,42 @@ export function useNearbyUsers(myPosition: GeoPosition | null) {
   // Fetch nearby users + subscribe to realtime changes
   const fetchUsers = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    // Fetch locations
+    const { data: locations } = await supabase
       .from('user_locations')
-      .select('*, profiles!user_locations_user_id_fkey(username, avatar_url)')
+      .select('*')
       .neq('user_id', user.id);
 
-    if (data) {
-      const mapped: NearbyUser[] = data.map((d: any) => ({
+    if (!locations || locations.length === 0) {
+      setUsers([]);
+      setCleaningCount(0);
+      return;
+    }
+
+    // Fetch profiles for those users
+    const userIds = locations.map(l => l.user_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('user_id, username, avatar_url')
+      .in('user_id', userIds);
+
+    const profileMap = new Map((profiles ?? []).map(p => [p.user_id, p]));
+
+    const mapped: NearbyUser[] = locations.map((d) => {
+      const profile = profileMap.get(d.user_id);
+      return {
         id: d.id,
         user_id: d.user_id,
-        username: d.profiles?.username ?? 'User',
-        avatar_url: d.profiles?.avatar_url ?? null,
+        username: profile?.username ?? 'User',
+        avatar_url: profile?.avatar_url ?? null,
         lat: d.lat,
         lng: d.lng,
         is_cleaning: d.is_cleaning,
         updated_at: d.updated_at,
-      }));
-      setUsers(mapped);
-      setCleaningCount(mapped.filter(u => u.is_cleaning).length);
-    }
+      };
+    });
+    setUsers(mapped);
+    setCleaningCount(mapped.filter(u => u.is_cleaning).length);
   }, [user]);
 
   useEffect(() => {

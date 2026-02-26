@@ -52,16 +52,20 @@ const missionIcon = L.divIcon({
   iconAnchor: [20, 20],
 });
 
-// Component to recenter map
+// Component to recenter map (must be inside MapContainer)
 function RecenterButton({ position }: { position: [number, number] }) {
   const map = useMap();
   return (
-    <button
-      onClick={() => map.flyTo(position, 15, { duration: 0.8 })}
-      className="absolute bottom-28 right-4 z-[1000] w-10 h-10 rounded-xl bg-card eco-shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-    >
-      <Navigation className="w-4 h-4" />
-    </button>
+    <div className="leaflet-bottom leaflet-right" style={{ marginBottom: '7rem', marginRight: '1rem' }}>
+      <div className="leaflet-control">
+        <button
+          onClick={(e) => { e.stopPropagation(); map.flyTo(position, 15, { duration: 0.8 }); }}
+          className="w-10 h-10 rounded-xl bg-card eco-shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Navigation className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -256,6 +260,7 @@ export default function MapScreen() {
             </Popup>
           </Marker>
         )}
+        <RecenterButton position={myCenter} />
       </MapContainer>
 
       {/* Top bar */}
@@ -291,8 +296,6 @@ export default function MapScreen() {
         </div>
       </div>
 
-      {/* Recenter button */}
-      <RecenterButton position={myCenter} />
 
       {/* Bottom zone summary */}
       <div className="absolute bottom-20 left-4 right-4 z-[1000]">

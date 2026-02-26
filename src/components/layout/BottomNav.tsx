@@ -1,10 +1,9 @@
-import { Map, MessageCircle, Trophy, User, Plus } from 'lucide-react';
+import { Map, Trophy, User, Plus } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { icon: Map, label: 'Map', path: '/' },
-  { icon: MessageCircle, label: 'Chat', path: '/chat' },
   { icon: null, label: 'Scan', path: '/mission-start' }, // FAB placeholder
   { icon: Trophy, label: 'Ranks', path: '/leaderboard' },
   { icon: User, label: 'Profile', path: '/profile' },

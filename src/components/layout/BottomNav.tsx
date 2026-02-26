@@ -38,12 +38,12 @@ export function BottomNav() {
       </div>
 
       {/* Nav bar */}
-      <nav className="bg-card/95 backdrop-blur-xl border-t border-border px-2 pb-safe">
-        <div className="flex items-center justify-evenly h-16 max-w-sm mx-auto">
+      <nav className="bg-card/95 backdrop-blur-xl border-t border-border px-4 pb-safe">
+        <div className="flex items-center h-16">
           {navItems.map((item, i) => {
             if (!item.icon) {
               // Spacer for FAB
-              return <div key={i} className="w-10" />;
+              return <div key={i} className="flex-1 flex items-center justify-center" />;
             }
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
@@ -52,7 +52,7 @@ export function BottomNav() {
                 key={item.path}
                 onClick={() => navigate(item.path)}
                 className={cn(
-                  'flex flex-col items-center gap-0.5 py-1 px-3 rounded-xl transition-all',
+                  'flex-1 flex flex-col items-center gap-0.5 py-1 rounded-xl transition-all',
                   isActive
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'

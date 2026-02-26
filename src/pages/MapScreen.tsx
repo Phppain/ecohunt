@@ -127,7 +127,7 @@ export default function MapScreen() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const { position, permissionDenied, requestPermission } = useGeolocation({ enableHighAccuracy: true, distanceFilter: 5 });
+  const { position, permissionDenied, requestPermission, dismissPermission } = useGeolocation({ enableHighAccuracy: true, distanceFilter: 5 });
   const { nearbyUsers } = useNearbyUsers(position);
 
   // Initialize map
@@ -487,7 +487,7 @@ export default function MapScreen() {
               <button onClick={requestPermission} className="eco-gradient text-primary-foreground px-6 py-2 rounded-xl font-semibold">
                 Включить геолокацию
               </button>
-              <button onClick={() => requestPermission()} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={dismissPermission} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Продолжить без геолокации
               </button>
             </div>

@@ -245,6 +245,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_locations: {
+        Row: {
+          id: string
+          is_cleaning: boolean
+          lat: number
+          lng: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          is_cleaning?: boolean
+          lat: number
+          lng: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          is_cleaning?: boolean
+          lat?: number
+          lng?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_stats: {
         Row: {
           id: string

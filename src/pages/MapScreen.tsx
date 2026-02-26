@@ -12,6 +12,7 @@ import { useNearbyUsers } from '@/hooks/use-nearby-users';
 import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
 import { CityProgressCard } from '@/components/map/CityProgressCard';
+import { reverseGeocode } from '@/lib/reverse-geocode';
 
 interface Zone {
   id: string;
@@ -22,6 +23,15 @@ interface Zone {
   severity: 'GREEN' | 'YELLOW' | 'RED';
 }
 
+interface MissionAnalysis {
+  items_before: number;
+  items_after: number;
+  difficulty: string;
+  waste_diverted_kg: number;
+  co2_saved_kg: number;
+  improvement_pct: number;
+}
+
 interface Mission {
   id: string;
   lat: number;
@@ -29,6 +39,29 @@ interface Mission {
   title: string | null;
   status: string;
   zone_id: string | null;
+  mission_analysis: MissionAnalysis[];
+}
+
+const problemDescriptions: Record<string, { icon: string; label: string; action: string }> = {
+  HARD: { icon: '🏚️', label: 'Крупная свалка', action: 'Нужна бригада и спецтехника для вывоза' },
+  MODERATE: { icon: '🗑️', label: 'Скопление мусора', action: 'Нужны волонтёры с мешками для уборки' },
+  EASY: { icon: '📦', label: 'Разбросанный мусор', action: 'Можно убрать одному за 15-30 минут' },
+};
+
+function findNearestZone(lat: number, lng: number, zones: Zone[]): Zone | null {
+  let nearest: Zone | null = null;
+  let minDist = Infinity;
+  for (const zone of zones) {
+    const dist = Math.sqrt(
+      Math.pow(lat - zone.center_lat, 2) + Math.pow(lng - zone.center_lng, 2)
+    );
+    const radiusDeg = zone.radius_m / 111000;
+    if (dist < radiusDeg * 1.5 && dist < minDist) {
+      minDist = dist;
+      nearest = zone;
+    }
+  }
+  return nearest;
 }
 
 const severityColor: Record<string, string> = {
@@ -185,7 +218,7 @@ export default function MapScreen() {
     const fetchData = async () => {
       const [zonesRes, missionsRes] = await Promise.all([
         supabase.from('zones').select('*'),
-        supabase.from('missions').select('*').limit(50),
+        supabase.from('missions').select('*, mission_analysis(*)').limit(50),
       ]);
       if (zonesRes.data) setZones(zonesRes.data as Zone[]);
       if (missionsRes.data) setMissions(missionsRes.data as Mission[]);
@@ -254,36 +287,76 @@ export default function MapScreen() {
       zoneCirclesRef.current.push(circle);
 
 
-      // Generate small pollution spot circles inside zone
-      const spotCount = Math.max(3, Math.ceil(zone.radius_m / 80));
-      for (let i = 0; i < spotCount; i++) {
-        const angle = Math.random() * 2 * Math.PI;
-        const dist = Math.random() * 0.85; // stay within 85% of radius
-        const spotLat = zone.center_lat + (dist * zone.radius_m / 111000) * Math.cos(angle);
-        const spotLng = zone.center_lng + (dist * zone.radius_m / 111000) * Math.sin(angle) / Math.cos(zone.center_lat * Math.PI / 180);
-        const isCleaned = Math.random() < (pct / 100);
+      // Place real mission spots inside this zone
+      const matchedMissions = missions.filter(m => {
+        if (m.lat === 0 && m.lng === 0) return false;
+        if (m.zone_id === zone.id) return true;
+        if (!m.zone_id) return findNearestZone(m.lat, m.lng, zones)?.id === zone.id;
+        return false;
+      });
 
+      matchedMissions.forEach(mission => {
+        const analysis = mission.mission_analysis?.[0];
+        const difficulty = analysis?.difficulty || 'MODERATE';
+        const prob = problemDescriptions[difficulty] || problemDescriptions.MODERATE;
+        const isCleaned = mission.status === 'CLEANED';
         const spotColor = isCleaned ? '#22c55e' : severityColor[zone.severity];
-        const spotRadius = 8 + Math.random() * 14;
-        const spot = L.circleMarker([spotLat, spotLng], {
-          radius: spotRadius,
+
+        const spot = L.circleMarker([mission.lat, mission.lng], {
+          radius: isCleaned ? 8 : (difficulty === 'HARD' ? 16 : difficulty === 'MODERATE' ? 12 : 9),
           color: spotColor,
           fillColor: spotColor,
-          fillOpacity: isCleaned ? 0.25 : 0.5,
-          weight: isCleaned ? 1 : 2,
-          opacity: isCleaned ? 0.4 : 0.7,
+          fillOpacity: isCleaned ? 0.25 : 0.55,
+          weight: isCleaned ? 1 : 2.5,
+          opacity: isCleaned ? 0.4 : 0.8,
         });
-        spot.bindPopup(`
-          <div style="font-family:system-ui;text-align:center;min-width:100px">
-            <div style="font-size:20px;margin-bottom:4px">${isCleaned ? '✅' : '🗑️'}</div>
-            <strong style="font-size:12px">${isCleaned ? 'Убрано' : 'Загрязнение'}</strong>
-            <p style="font-size:11px;color:#64748b;margin:2px 0 0">${zone.name}</p>
-          </div>
-        `);
+
+        // Lazy-loaded popup with reverse geocoding
+        const popup = L.popup({ minWidth: 200 });
+        spot.bindPopup(popup);
+        spot.on('popupopen', async () => {
+          popup.setContent('<div style="font-family:system-ui;text-align:center;padding:8px"><span style="color:#94a3b8">Загрузка...</span></div>');
+          const address = await reverseGeocode(mission.lat, mission.lng);
+          const itemsBefore = analysis?.items_before ?? '—';
+          const itemsAfter = analysis?.items_after ?? '—';
+          const wasteDiverted = analysis?.waste_diverted_kg?.toFixed(1) ?? '—';
+
+          popup.setContent(`
+            <div style="font-family:system-ui;min-width:200px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span style="font-size:20px">${isCleaned ? '✅' : prob.icon}</span>
+                <div>
+                  <strong style="font-size:13px;display:block">${isCleaned ? 'Убрано!' : prob.label}</strong>
+                  <span style="font-size:11px;color:#64748b">${address}</span>
+                </div>
+              </div>
+              <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:6px">
+                <div style="font-size:11px;color:#64748b;margin-bottom:4px">📊 Детали</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
+                  <div>До: <strong>${itemsBefore}</strong> предметов</div>
+                  <div>После: <strong>${itemsAfter}</strong> предметов</div>
+                  <div>Вывезено: <strong>${wasteDiverted}</strong> кг</div>
+                  <div>Сложность: <strong>${difficulty === 'HARD' ? '🔴 Высокая' : difficulty === 'MODERATE' ? '🟡 Средняя' : '🟢 Лёгкая'}</strong></div>
+                </div>
+              </div>
+              ${!isCleaned ? `
+                <div style="background:#fef3c7;border-radius:8px;padding:8px;font-size:11px">
+                  <strong style="color:#92400e">🛠 Что нужно:</strong>
+                  <p style="color:#78350f;margin:2px 0 0">${prob.action}</p>
+                </div>
+              ` : `
+                <div style="background:#dcfce7;border-radius:8px;padding:8px;font-size:11px;color:#166534">
+                  ✨ Проблема решена! Спасибо волонтёрам.
+                </div>
+              `}
+            </div>
+          `);
+        });
+
         if (pollutionSpotsRef.current) {
           pollutionSpotsRef.current.addLayer(spot);
         }
-      }
+      });
 
       // Heatmap — reduce intensity based on cleanup
       const intensity = severityIntensity[zone.severity] ?? 0.5;
@@ -331,7 +404,7 @@ export default function MapScreen() {
     }
   }, [zones, missions]);
 
-  // Render missions on map
+  // Render mission markers (outside zones)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -339,10 +412,28 @@ export default function MapScreen() {
     missionMarkersRef.current.forEach(m => map.removeLayer(m));
     missionMarkersRef.current = [];
 
-    missions.forEach(mission => {
+    missions.filter(m => m.lat !== 0 && m.lng !== 0).forEach(mission => {
       const marker = L.marker([mission.lat, mission.lng], { icon: missionDivIcon }).addTo(map);
-      marker.bindPopup(`<strong>${mission.title || 'Cleanup Mission'}</strong><br/>Status: ${mission.status}`);
-      marker.on('click', () => {});
+      const popup = L.popup({ minWidth: 200 });
+      marker.bindPopup(popup);
+      marker.on('popupopen', async () => {
+        popup.setContent('<div style="font-family:system-ui;text-align:center;padding:8px"><span style="color:#94a3b8">Загрузка...</span></div>');
+        const address = await reverseGeocode(mission.lat, mission.lng);
+        const analysis = mission.mission_analysis?.[0];
+        const difficulty = analysis?.difficulty || 'MODERATE';
+        const prob = problemDescriptions[difficulty] || problemDescriptions.MODERATE;
+        const isCleaned = mission.status === 'CLEANED';
+
+        popup.setContent(`
+          <div style="font-family:system-ui;min-width:180px">
+            <strong style="font-size:13px">${mission.title || 'Репорт загрязнения'}</strong>
+            <p style="font-size:11px;color:#64748b;margin:2px 0 6px">📍 ${address}</p>
+            <div style="font-size:11px;padding:6px;border-radius:6px;background:${isCleaned ? '#dcfce7' : '#fef3c7'}">
+              ${isCleaned ? '✅ Убрано' : `${prob.icon} ${prob.label} — ${prob.action}`}
+            </div>
+          </div>
+        `);
+      });
       missionMarkersRef.current.push(marker);
     });
   }, [missions]);

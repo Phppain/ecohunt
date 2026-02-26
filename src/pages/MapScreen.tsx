@@ -248,8 +248,7 @@ export default function MapScreen() {
           border:2px solid rgba(255,255,255,0.5);
           display:flex;align-items:center;gap:4px;
         ">
-          <span style="font-size:11px">${severityEmoji[zone.severity]}</span>
-          ${cleaned}/${total}
+          ${pct}/100
         </div>`,
         iconAnchor: [50, 12],
       });

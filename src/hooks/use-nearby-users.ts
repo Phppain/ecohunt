@@ -20,12 +20,25 @@ export function useNearbyUsers(myPosition: GeoPosition | null) {
   const [cleaningCount, setCleaningCount] = useState(0);
   const mountedRef = useRef(true);
   const broadcastInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fetchingRef = useRef(false);
 
-  // Broadcast my location every 3 seconds
+  // Safe state setter — wraps in queueMicrotask for Safari compatibility
+  const safeSetUsers = useCallback((val: NearbyUser[]) => {
+    if (!mountedRef.current) return;
+    try { setUsers(val); } catch { /* swallow */ }
+  }, []);
+  const safeSetCount = useCallback((val: number) => {
+    if (!mountedRef.current) return;
+    try { setCleaningCount(val); } catch { /* swallow */ }
+  }, []);
+
+  // Broadcast my location every 5 seconds (reduced from 3 for Safari)
   useEffect(() => {
     if (!user || !myPosition) return;
 
+    let cancelled = false;
     const broadcast = async () => {
+      if (cancelled) return;
       try {
         await supabase.from('user_locations').upsert(
           { user_id: user.id, lat: myPosition.lat, lng: myPosition.lng, is_cleaning: false, updated_at: new Date().toISOString() },
@@ -37,23 +50,29 @@ export function useNearbyUsers(myPosition: GeoPosition | null) {
     };
 
     broadcast();
-    broadcastInterval.current = setInterval(broadcast, 3000);
-    return () => { if (broadcastInterval.current) clearInterval(broadcastInterval.current); };
+    broadcastInterval.current = setInterval(broadcast, 5000);
+    return () => {
+      cancelled = true;
+      if (broadcastInterval.current) clearInterval(broadcastInterval.current);
+    };
   }, [user, myPosition?.lat, myPosition?.lng]);
 
   const fetchUsers = useCallback(async () => {
-    if (!user || !mountedRef.current) return;
+    if (!user || !mountedRef.current || fetchingRef.current) return;
+    fetchingRef.current = true;
+
     try {
-      const { data: locations } = await supabase
+      const { data: locations, error: locErr } = await supabase
         .from('user_locations')
         .select('*')
         .neq('user_id', user.id);
 
+      if (locErr) throw locErr;
       if (!mountedRef.current) return;
 
       if (!locations || locations.length === 0) {
-        setUsers([]);
-        setCleaningCount(0);
+        safeSetUsers([]);
+        safeSetCount(0);
         return;
       }
 
@@ -80,16 +99,22 @@ export function useNearbyUsers(myPosition: GeoPosition | null) {
           updated_at: d.updated_at,
         };
       });
-      setUsers(mapped);
-      setCleaningCount(mapped.filter(u => u.is_cleaning).length);
+      safeSetUsers(mapped);
+      safeSetCount(mapped.filter(u => u.is_cleaning).length);
     } catch (e) {
       console.warn('Failed to fetch nearby users:', e);
+    } finally {
+      fetchingRef.current = false;
     }
-  }, [user]);
+  }, [user, safeSetUsers, safeSetCount]);
 
   useEffect(() => {
     mountedRef.current = true;
-    fetchUsers();
+
+    // Delay initial fetch slightly to ensure React's dispatcher is ready (Safari fix)
+    const timer = setTimeout(() => {
+      if (mountedRef.current) fetchUsers();
+    }, 100);
 
     const channel = supabase
       .channel('user-locations-realtime')
@@ -100,6 +125,7 @@ export function useNearbyUsers(myPosition: GeoPosition | null) {
 
     return () => {
       mountedRef.current = false;
+      clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [fetchUsers]);

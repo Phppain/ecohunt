@@ -207,11 +207,11 @@ export default function MapScreen() {
 
       const circle = L.circle([zone.center_lat, zone.center_lng], {
         radius: zone.radius_m,
-        color: severityColor[zone.severity],
-        fillColor: severityColor[zone.severity],
-        fillOpacity: zone.severity === 'RED' ? 0.18 : zone.severity === 'YELLOW' ? 0.12 : 0.08,
-        weight: 2,
-        opacity: 0.6,
+        color: 'transparent',
+        fillColor: 'transparent',
+        fillOpacity: 0,
+        weight: 0,
+        opacity: 0,
       }).addTo(map);
 
       const popupHtml = `

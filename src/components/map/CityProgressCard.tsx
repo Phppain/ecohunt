@@ -1,4 +1,5 @@
-import { TrendingDown, TrendingUp, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingDown, TrendingUp, Sparkles, X } from 'lucide-react';
 import { EcoCard } from '@/components/eco/EcoCard';
 
 interface CityProgressCardProps {
@@ -9,10 +10,19 @@ interface CityProgressCardProps {
 }
 
 export function CityProgressCard({ totalMissions, cleanedMissions, zonesCount, improvementPct }: CityProgressCardProps) {
+  const [visible, setVisible] = useState(true);
   const isImproving = improvementPct > 0;
 
+  if (!visible) return null;
+
   return (
-    <EcoCard variant="glass" className="p-3">
+    <EcoCard variant="glass" className="p-3 relative">
+      <button
+        onClick={() => setVisible(false)}
+        className="absolute top-2 right-2 w-5 h-5 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <X className="w-3 h-3" />
+      </button>
       <div className="flex items-center gap-3">
         <div className="relative">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isImproving ? 'bg-primary/20' : 'bg-destructive/20'}`}>

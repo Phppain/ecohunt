@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { icon: Map, label: 'Map', path: '/' },
   { icon: MessageCircle, label: 'Chat', path: '/chat' },
-  { icon: null, label: 'Scan', path: '/scan' }, // FAB placeholder
+  { icon: null, label: 'Scan', path: '/mission-start' }, // FAB placeholder
   { icon: Trophy, label: 'Ranks', path: '/leaderboard' },
   { icon: User, label: 'Profile', path: '/profile' },
 ];
@@ -14,12 +14,24 @@ export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const handleFabClick = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => navigate('/mission-start', { state: { lat: pos.coords.latitude, lng: pos.coords.longitude } }),
+        () => navigate('/mission-start', { state: { lat: 43.238949, lng: 76.945465 } }),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    } else {
+      navigate('/mission-start', { state: { lat: 43.238949, lng: 76.945465 } });
+    }
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
       {/* FAB */}
       <div className="absolute -top-7 left-1/2 -translate-x-1/2 z-10">
         <button
-          onClick={() => navigate('/scan')}
+          onClick={handleFabClick}
           className="w-14 h-14 rounded-full eco-gradient eco-shadow-lg flex items-center justify-center text-primary-foreground hover:scale-110 transition-transform active:scale-95"
         >
           <Plus className="w-7 h-7" strokeWidth={2.5} />

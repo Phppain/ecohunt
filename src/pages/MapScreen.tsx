@@ -63,6 +63,7 @@ export default function MapScreen() {
   const missionMarkersRef = useRef<L.Marker[]>([]);
   const zoneCirclesRef = useRef<L.Circle[]>([]);
   const zoneLabelLayersRef = useRef<L.Marker[]>([]);
+  const pollutionSpotsRef = useRef<L.LayerGroup | null>(null);
   const heatLayerRef = useRef<L.Layer | null>(null);
   const initializedRef = useRef(false);
 
@@ -118,6 +119,21 @@ export default function MapScreen() {
         }
       }, 50);
     });
+
+    // Pollution spots layer (visible only when zoomed in)
+    const spotsGroup = L.layerGroup();
+    pollutionSpotsRef.current = spotsGroup;
+
+    const updateSpotsVisibility = () => {
+      const zoom = map.getZoom();
+      if (zoom >= 15) {
+        if (!map.hasLayer(spotsGroup)) map.addLayer(spotsGroup);
+      } else {
+        if (map.hasLayer(spotsGroup)) map.removeLayer(spotsGroup);
+      }
+    };
+    map.on('zoomend', updateSpotsVisibility);
+    updateSpotsVisibility();
 
     mapRef.current = map;
 
@@ -188,6 +204,7 @@ export default function MapScreen() {
     zoneCirclesRef.current = [];
     zoneLabelLayersRef.current.forEach(l => map.removeLayer(l));
     zoneLabelLayersRef.current = [];
+    if (pollutionSpotsRef.current) pollutionSpotsRef.current.clearLayers();
 
     if (heatLayerRef.current) {
       map.removeLayer(heatLayerRef.current);
@@ -236,6 +253,37 @@ export default function MapScreen() {
       circle.bindPopup(popupHtml);
       zoneCirclesRef.current.push(circle);
 
+
+      // Generate small pollution spot circles inside zone
+      const spotCount = Math.max(3, Math.ceil(zone.radius_m / 80));
+      for (let i = 0; i < spotCount; i++) {
+        const angle = Math.random() * 2 * Math.PI;
+        const dist = Math.random() * 0.85; // stay within 85% of radius
+        const spotLat = zone.center_lat + (dist * zone.radius_m / 111000) * Math.cos(angle);
+        const spotLng = zone.center_lng + (dist * zone.radius_m / 111000) * Math.sin(angle) / Math.cos(zone.center_lat * Math.PI / 180);
+        const isCleaned = Math.random() < (pct / 100);
+
+        const spotColor = isCleaned ? '#22c55e' : severityColor[zone.severity];
+        const spotRadius = 8 + Math.random() * 14;
+        const spot = L.circleMarker([spotLat, spotLng], {
+          radius: spotRadius,
+          color: spotColor,
+          fillColor: spotColor,
+          fillOpacity: isCleaned ? 0.25 : 0.5,
+          weight: isCleaned ? 1 : 2,
+          opacity: isCleaned ? 0.4 : 0.7,
+        });
+        spot.bindPopup(`
+          <div style="font-family:system-ui;text-align:center;min-width:100px">
+            <div style="font-size:20px;margin-bottom:4px">${isCleaned ? '✅' : '🗑️'}</div>
+            <strong style="font-size:12px">${isCleaned ? 'Убрано' : 'Загрязнение'}</strong>
+            <p style="font-size:11px;color:#64748b;margin:2px 0 0">${zone.name}</p>
+          </div>
+        `);
+        if (pollutionSpotsRef.current) {
+          pollutionSpotsRef.current.addLayer(spot);
+        }
+      }
 
       // Heatmap — reduce intensity based on cleanup
       const intensity = severityIntensity[zone.severity] ?? 0.5;

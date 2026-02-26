@@ -39,11 +39,11 @@ export function BottomNav() {
 
       {/* Nav bar */}
       <nav className="bg-card/95 backdrop-blur-xl border-t border-border px-2 pb-safe">
-        <div className="flex items-center justify-around h-16 max-w-md mx-auto">
+        <div className="flex items-center justify-evenly h-16 max-w-sm mx-auto">
           {navItems.map((item, i) => {
             if (!item.icon) {
               // Spacer for FAB
-              return <div key={i} className="w-14" />;
+              return <div key={i} className="w-10" />;
             }
             const isActive = location.pathname === item.path;
             const Icon = item.icon;

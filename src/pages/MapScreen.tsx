@@ -249,7 +249,7 @@ export default function MapScreen() {
           display:flex;align-items:center;gap:4px;
         ">
           <span style="font-size:11px">${severityEmoji[zone.severity]}</span>
-          ${pct}% убрано
+          ${cleaned}/${total}
         </div>`,
         iconAnchor: [50, 12],
       });

@@ -13,6 +13,7 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const hasEverSucceeded = useRef(false);
   const watchIdRef = useRef<number | null>(null);
   const lastPos = useRef<GeoPosition | null>(null);
   const distanceFilter = options?.distanceFilter ?? 5;
@@ -43,9 +44,11 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
         }
         setError(null);
         setPermissionDenied(false);
+        hasEverSucceeded.current = true;
       },
       (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
+        // Only show permission modal if we've NEVER gotten a position
+        if (err.code === err.PERMISSION_DENIED && !hasEverSucceeded.current) {
           setPermissionDenied(true);
         }
         setError(err.message);

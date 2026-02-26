@@ -106,5 +106,11 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
     startWatching();
   }, [startWatching]);
 
-  return { position: position ?? FALLBACK, error, permissionDenied, requestPermission };
+  const dismissPermission = useCallback(() => {
+    if (!mountedRef.current) return;
+    setPermissionDenied(false);
+    hasEverSucceeded.current = true; // prevent it from showing again
+  }, []);
+
+  return { position: position ?? FALLBACK, error, permissionDenied, requestPermission, dismissPermission };
 }

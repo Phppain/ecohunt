@@ -29,7 +29,7 @@ export function BottomNav() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50">
       {/* FAB */}
-      <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10">
+      <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-10">
         <button
           onClick={handleFabClick}
           className="w-14 h-14 rounded-full eco-gradient eco-shadow-lg flex items-center justify-center text-primary-foreground hover:scale-110 transition-transform active:scale-95"

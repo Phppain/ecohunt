@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import MapScreen from "./pages/MapScreen";
 import CameraScan from "./pages/CameraScan";
 import PostClean from "./pages/PostClean";
+import MissionStart from "./pages/MissionStart";
 import Leaderboard from "./pages/Leaderboard";
 import Profile from "./pages/Profile";
 import ChatPlaceholder from "./pages/ChatPlaceholder";
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/profile" element={<Profile />} />
             </Route>
             <Route path="/scan" element={<ProtectedRoute><CameraScan /></ProtectedRoute>} />
+            <Route path="/mission-start" element={<ProtectedRoute><MissionStart /></ProtectedRoute>} />
             <Route path="/post-clean" element={<ProtectedRoute><PostClean /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

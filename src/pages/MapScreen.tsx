@@ -98,7 +98,7 @@ export default function MapScreen() {
         .setContent(`
           <div style="text-align:center;font-family:system-ui">
             <p style="font-size:11px;color:#666;margin:0 0 4px">${lat.toFixed(5)}, ${lng.toFixed(5)}</p>
-            <button id="create-mission-btn" style="font-size:12px;font-weight:700;color:hsl(142,71%,45%);background:none;border:none;cursor:pointer;text-decoration:underline">Create mission here</button>
+            <button id="create-mission-btn" style="font-size:12px;font-weight:700;color:hsl(142,71%,45%);background:none;border:none;cursor:pointer;text-decoration:underline">Начать миссию здесь</button>
           </div>
         `)
         .openOn(map);
@@ -106,17 +106,9 @@ export default function MapScreen() {
       setTimeout(() => {
         const btn = document.getElementById('create-mission-btn');
         if (btn) {
-          btn.onclick = async () => {
-            const { error } = await supabase.from('missions').insert({
-              lat, lng, creator_id: user.id, title: 'New cleanup mission',
-            });
-            if (error) toast.error('Failed to create mission');
-            else {
-              toast.success('Mission created!');
-              map.closePopup();
-              const { data } = await supabase.from('missions').select('*').limit(50);
-              if (data) setMissions(data as Mission[]);
-            }
+          btn.onclick = () => {
+            map.closePopup();
+            navigate('/mission-start', { state: { lat, lng } });
           };
         }
       }, 50);

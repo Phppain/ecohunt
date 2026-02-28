@@ -129,12 +129,27 @@ export default function MissionStart() {
       setAfterAnalysis(data.result);
       setStep('results');
 
-      // Update mission status
-      if (missionId) {
-        await supabase.from('missions').update({ status: 'CLEANED' }).eq('id', missionId);
+      // Update mission status + severity
+      if (missionId && beforeAnalysis) {
+        await supabase.from('missions').update({
+          status: 'CLEANED',
+          severity_color: beforeAnalysis.severity,
+        }).eq('id', missionId);
+
+        // Save analysis to mission_analysis (single source of truth for waste/co2)
+        const result = data.result;
+        await supabase.from('mission_analysis').insert({
+          mission_id: missionId,
+          items_before: result.items_before || 0,
+          items_after: result.items_after || 0,
+          improvement_pct: result.improvement_pct || 0,
+          waste_diverted_kg: result.waste_diverted_kg || 0,
+          co2_saved_kg: result.co2_saved_kg || 0,
+          difficulty: beforeAnalysis.difficulty || 'EASY',
+        });
       }
 
-      // Award points
+      // Award points via points_log (single source of truth for points)
       if (user && data.result?.total_points_earned) {
         await supabase.from('points_log').insert({
           user_id: user.id,
@@ -142,9 +157,22 @@ export default function MissionStart() {
           points: data.result.total_points_earned,
           reason: 'AI cleanup verification',
         });
-        await supabase.from('user_stats').update({
-          total_points: data.result.total_points_earned, // ideally increment
-        }).eq('user_id', user.id);
+
+        // Increment user_stats (for profile display)
+        const { data: currentStats } = await supabase
+          .from('user_stats')
+          .select('total_points, weekly_points, monthly_points')
+          .eq('user_id', user.id)
+          .single();
+
+        if (currentStats) {
+          await supabase.from('user_stats').update({
+            total_points: (currentStats.total_points || 0) + data.result.total_points_earned,
+            weekly_points: (currentStats.weekly_points || 0) + data.result.total_points_earned,
+            monthly_points: (currentStats.monthly_points || 0) + data.result.total_points_earned,
+            last_action_at: new Date().toISOString(),
+          }).eq('user_id', user.id);
+        }
       }
     } catch (err: any) {
       toast.error(err.message || 'Ошибка анализа');

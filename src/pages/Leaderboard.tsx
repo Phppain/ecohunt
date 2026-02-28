@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Trophy, Crown, Star, Gift, Flame, TrendingUp, Trash2, Wind, RefreshCw } from 'lucide-react';
 import { EcoCard } from '@/components/eco/EcoCard';
 import { EcoChip } from '@/components/eco/EcoChip';
-import { useLeaderboard, LeaderboardPeriod } from '@/hooks/use-leaderboard';
+import { useLeaderboard, type LeaderboardPeriod } from '@/hooks/use-leaderboard';
 import { useAuth } from '@/lib/auth-context';
 
 const periods: { label: string; value: LeaderboardPeriod }[] = [
@@ -25,7 +25,7 @@ function getAvatarEmoji(userId: string) {
 
 export default function Leaderboard() {
   const [activePeriod, setActivePeriod] = useState<LeaderboardPeriod>('weekly');
-  const { leaders, periodStats, loading, refetch } = useLeaderboard(activePeriod);
+  const { leaders, globalStats, loading, refetch } = useLeaderboard(activePeriod);
   const { user } = useAuth();
 
   const top3 = leaders.slice(0, 3);
@@ -66,21 +66,21 @@ export default function Leaderboard() {
           ))}
         </div>
 
-        {/* Period stats summary */}
+        {/* Global stats — sum of all leaderboard entries for the period */}
         <div className="grid grid-cols-3 gap-2 mt-3">
           <div className="bg-primary-foreground/10 rounded-xl p-2 text-center">
             <Trash2 className="w-4 h-4 text-primary-foreground/80 mx-auto mb-0.5" />
-            <p className="text-lg font-bold text-primary-foreground">{periodStats.total_missions}</p>
+            <p className="text-lg font-bold text-primary-foreground">{globalStats.total_missions}</p>
             <p className="text-[9px] text-primary-foreground/60">Миссий</p>
           </div>
           <div className="bg-primary-foreground/10 rounded-xl p-2 text-center">
             <TrendingUp className="w-4 h-4 text-primary-foreground/80 mx-auto mb-0.5" />
-            <p className="text-lg font-bold text-primary-foreground">{periodStats.total_waste_kg} кг</p>
+            <p className="text-lg font-bold text-primary-foreground">{globalStats.total_trash_kg} кг</p>
             <p className="text-[9px] text-primary-foreground/60">Мусора убрано</p>
           </div>
           <div className="bg-primary-foreground/10 rounded-xl p-2 text-center">
             <Wind className="w-4 h-4 text-primary-foreground/80 mx-auto mb-0.5" />
-            <p className="text-lg font-bold text-primary-foreground">{periodStats.total_co2_kg} кг</p>
+            <p className="text-lg font-bold text-primary-foreground">{globalStats.total_co2_kg} кг</p>
             <p className="text-[9px] text-primary-foreground/60">CO₂ сохранено</p>
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function Leaderboard() {
                     )}
                   </div>
                   <p className="text-sm font-bold text-foreground mt-2 truncate max-w-[80px]">{leader.username}</p>
-                  <EcoChip variant="green" size="sm">{leader.points} EP</EcoChip>
+                  <EcoChip variant="green" size="sm">{leader.eco_points} EP</EcoChip>
                   {leader.streak_days > 0 && (
                     <div className="flex items-center gap-0.5 mt-1">
                       <Flame className="w-3 h-3 text-eco-orange" />
@@ -135,7 +135,7 @@ export default function Leaderboard() {
             <span className="text-sm font-bold text-primary-foreground">Ты #{currentUserRank}</span>
             <div className="flex-1" />
             <span className="text-sm font-bold text-primary-foreground">
-              {leaders[currentUserRank - 1]?.points} EP
+              {leaders[currentUserRank - 1]?.eco_points} EP
             </span>
           </EcoCard>
         </div>
@@ -161,23 +161,26 @@ export default function Leaderboard() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-foreground truncate">{entry.username}</p>
               <div className="flex gap-1.5 mt-0.5">
-                <span className="text-[10px] text-eco-green font-medium">🟢{entry.green_missions}</span>
-                <span className="text-[10px] text-eco-yellow font-medium">🟡{entry.yellow_missions}</span>
-                <span className="text-[10px] text-eco-red font-medium">🔴{entry.red_missions}</span>
+                <span className="text-[10px] text-eco-green font-medium">🟢{entry.green_count}</span>
+                <span className="text-[10px] text-eco-yellow font-medium">🟡{entry.yellow_count}</span>
+                <span className="text-[10px] text-eco-red font-medium">🔴{entry.red_count}</span>
               </div>
               <div className="flex gap-2 mt-0.5">
-                <span className="text-[10px] text-muted-foreground">🗑️ {entry.waste_kg} кг</span>
+                <span className="text-[10px] text-muted-foreground">🗑️ {entry.trash_kg} кг</span>
                 <span className="text-[10px] text-muted-foreground">🌿 {entry.co2_kg} кг CO₂</span>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm font-bold text-foreground">{entry.points}</p>
+              <p className="text-sm font-bold text-foreground">{entry.eco_points}</p>
               <p className="text-[10px] text-muted-foreground">EcoPoints</p>
             </div>
           </EcoCard>
         ))}
         {rest.length === 0 && top3.length > 0 && (
           <p className="text-center text-sm text-muted-foreground py-4">Больше участников пока нет</p>
+        )}
+        {leaders.length === 0 && !loading && (
+          <p className="text-center text-sm text-muted-foreground py-4">Нет данных за период</p>
         )}
       </div>
 

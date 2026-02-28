@@ -29,53 +29,58 @@ const achievements = [
   { icon: '🌍', label: 'Zone Master' },
 ];
 
-const activeMissions = [
-  { title: 'Central Park Cleanup', progress: 75, status: 'IN_PROGRESS' as const },
-  { title: 'Brooklyn Bridge Area', progress: 30, status: 'IN_PROGRESS' as const },
-  { title: 'Hudson Yards Sweep', progress: 0, status: 'OPEN' as const },
-];
-
 export default function Profile() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [ecoStats, setEcoStats] = useState({ waste_kg: 0, co2_kg: 0, missions_count: 0 });
+  const [activeMissions, setActiveMissions] = useState<{ title: string; progress: number; status: string }[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchData = async () => {
-      const [profileRes, statsRes] = await Promise.all([
+      // Fetch profile, stats, and missions in parallel
+      const [profileRes, statsRes, missionsRes] = await Promise.all([
         supabase.from('profiles').select('username, avatar_url').eq('user_id', user.id).single(),
         supabase.from('user_stats').select('*').eq('user_id', user.id).single(),
+        supabase.from('missions').select('id, title, status, cleanup_progress_pct').eq('creator_id', user.id),
       ]);
+
       if (profileRes.data) setProfile(profileRes.data as ProfileData);
       if (statsRes.data) setStats(statsRes.data as unknown as StatsData);
 
-      // Fetch eco stats (waste & CO2)
-      const { data: missions } = await supabase
-        .from('missions')
-        .select('id')
-        .eq('creator_id', user.id)
-        .eq('status', 'CLEANED');
-      
-      const missionIds = (missions || []).map(m => m.id);
-      if (missionIds.length > 0) {
+      // Active missions from real data
+      const allMissions = missionsRes.data || [];
+      const active = allMissions
+        .filter(m => m.status === 'IN_PROGRESS' || m.status === 'OPEN')
+        .map(m => ({
+          title: m.title || 'Миссия',
+          progress: m.cleanup_progress_pct || 0,
+          status: m.status,
+        }));
+      setActiveMissions(active);
+
+      // Eco impact: sum from mission_analysis for all CLEANED missions (all time)
+      const cleanedIds = allMissions.filter(m => m.status === 'CLEANED').map(m => m.id);
+      if (cleanedIds.length > 0) {
         const { data: analyses } = await supabase
           .from('mission_analysis')
           .select('waste_diverted_kg, co2_saved_kg')
-          .in('mission_id', missionIds);
-        
+          .in('mission_id', cleanedIds);
+
         let wasteKg = 0, co2Kg = 0;
         (analyses || []).forEach(a => {
           wasteKg += a.waste_diverted_kg;
           co2Kg += a.co2_saved_kg;
         });
         setEcoStats({
-          waste_kg: Math.round(wasteKg * 10) / 10,
-          co2_kg: Math.round(co2Kg * 10) / 10,
-          missions_count: missionIds.length,
+          waste_kg: Math.round(wasteKg * 100) / 100,
+          co2_kg: Math.round(co2Kg * 100) / 100,
+          missions_count: cleanedIds.length,
         });
+      } else {
+        setEcoStats({ waste_kg: 0, co2_kg: 0, missions_count: 0 });
       }
     };
     fetchData();
@@ -144,7 +149,7 @@ export default function Profile() {
           </EcoCard>
         </div>
 
-        {/* Eco Impact */}
+        {/* Eco Impact — real data only */}
         <div className="grid grid-cols-3 gap-3">
           <EcoCard variant="elevated" className="text-center py-4">
             <Trash2 className="w-5 h-5 text-eco-orange mx-auto mb-1" />
@@ -174,26 +179,30 @@ export default function Profile() {
           </div>
         </EcoCard>
 
-        {/* Active missions */}
+        {/* Active missions — real data */}
         <EcoCard>
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-bold text-foreground">Active Missions</p>
             <EcoChip variant="green" size="sm">{activeMissions.length}</EcoChip>
           </div>
-          <div className="space-y-3">
-            {activeMissions.map((m, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
-                  <Target className="w-4 h-4 text-primary" />
+          {activeMissions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-3">Нет активных миссий</p>
+          ) : (
+            <div className="space-y-3">
+              {activeMissions.map((m, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
+                    <Target className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-foreground">{m.title}</p>
+                    <EcoProgress value={m.progress} size="sm" variant="success" className="mt-1" />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{m.progress}%</span>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm text-foreground">{m.title}</p>
-                  <EcoProgress value={m.progress} size="sm" variant="success" className="mt-1" />
-                </div>
-                <span className="text-xs text-muted-foreground">{m.progress}%</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </EcoCard>
 
         {/* Achievements */}

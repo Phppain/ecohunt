@@ -155,28 +155,39 @@ serve(async (req) => {
 
     const toolName = mode === "before" ? "report_before_analysis" : mode === "help_description" ? "generate_help_description" : "report_after_analysis";
 
+    const messages = mode === "help_description"
+      ? [{ role: "user", content: [{ type: "text", text: userPrompt }] }]
+      : [{
+          role: "user",
+          content: [
+            { type: "text", text: userPrompt },
+            { type: "image_url", image_url: { url: imageBase64 } },
+          ],
+        }];
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort("AI_TIMEOUT"), 18000);
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
+      signal: controller.signal,
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: mode === "help_description" ? "google/gemini-2.5-flash-lite" : "google/gemini-2.5-flash",
+        max_tokens: mode === "help_description" ? 300 : undefined,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              { type: "image_url", image_url: { url: imageBase64 } },
-            ],
-          },
+          ...messages,
         ],
         tools,
         tool_choice: { type: "function", function: { name: toolName } },
       }),
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const status = response.status;
@@ -209,9 +220,31 @@ serve(async (req) => {
 
     const result = JSON.parse(toolCall.function.arguments);
     
-    // If help_description mode but got wrong tool result, adapt it
-    if (mode === "help_description" && !result.description && result.report) {
-      result.description = result.report;
+    // If help_description mode, normalize output even when model calls the wrong tool
+    if (mode === "help_description") {
+      const severityCtx = beforeData?.severity_color || beforeData?.severity || "ORANGE";
+      const isRed = severityCtx === "RED";
+
+      if (!result.description) {
+        const category = beforeData?.category || "смешанный мусор";
+        const totalItems = beforeData?.total_items ?? "несколько";
+        const summary = beforeData?.summary ? ` ${beforeData.summary}` : "";
+        result.description = `Обнаружено загрязнение категории «${category}», ориентировочно ${totalItems} единиц мусора.${summary} Нужна командная уборка с сортировкой и вывозом отходов.`;
+      }
+
+      if (!result.volunteers_needed) {
+        result.volunteers_needed = isRed ? 10 : 5;
+      }
+
+      if (!result.time_estimate) {
+        result.time_estimate = isRed ? "3-5 часов" : "1-2 часа";
+      }
+
+      if (!Array.isArray(result.tools_needed) || result.tools_needed.length === 0) {
+        result.tools_needed = isRed
+          ? ["Перчатки", "Мешки для мусора", "Лопаты", "Транспорт для вывоза"]
+          : ["Перчатки", "Мешки для мусора", "Сортировочные пакеты"];
+      }
     }
     
     return new Response(JSON.stringify({ mode, result }), {
@@ -219,8 +252,10 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("analyze-waste error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const message = e instanceof Error ? e.message : "Unknown error";
+    const isTimeout = message.includes("AI_TIMEOUT") || message.includes("aborted");
+    return new Response(JSON.stringify({ error: isTimeout ? "ИИ отвечает слишком долго. Попробуйте ещё раз." : message }), {
+      status: isTimeout ? 504 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
-import { ArrowLeft, Camera, Upload, MapPin, Trash2, Play, Loader2, Sparkles, CheckCircle2, AlertTriangle, Leaf, Zap } from 'lucide-react';
+import { ArrowLeft, Camera, Upload, MapPin, Trash2, Play, Loader2, Sparkles, CheckCircle2, AlertTriangle, Leaf, Zap, HelpCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { EcoCard } from '@/components/eco/EcoCard';
 import { EcoChip } from '@/components/eco/EcoChip';
 import { EcoButton } from '@/components/eco/EcoButton';
 import { EcoProgress } from '@/components/eco/EcoProgress';
+import { NeedHelpForm } from '@/components/mission/NeedHelpForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
@@ -33,7 +34,7 @@ interface AfterAnalysis {
   report: string;
 }
 
-type Step = 'before_photo' | 'before_analysis' | 'cleaning' | 'after_photo' | 'after_analysis' | 'results';
+type Step = 'before_photo' | 'before_analysis' | 'cleaning' | 'after_photo' | 'after_analysis' | 'results' | 'need_help';
 
 export default function MissionStart() {
   const navigate = useNavigate();
@@ -280,6 +281,22 @@ export default function MissionStart() {
               </ul>
             </EcoCard>
 
+            {/* Need Help button for YELLOW/RED severity */}
+            {beforeAnalysis && (beforeAnalysis.severity === 'YELLOW' || beforeAnalysis.severity === 'RED') && (
+              <EcoCard className="border border-eco-orange/30 bg-eco-orange/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <HelpCircle className="w-5 h-5 text-eco-orange" />
+                  <span className="text-sm font-bold text-foreground">Не можете убрать сами?</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  При сильном загрязнении вы можете опубликовать миссию на карте, чтобы привлечь волонтёров.
+                </p>
+                <EcoButton variant="outline" className="w-full border-eco-orange text-eco-orange" onClick={() => setStep('need_help')}>
+                  <HelpCircle className="w-4 h-4" /> Нужна помощь
+                </EcoButton>
+              </EcoCard>
+            )}
+
             {/* After photo upload */}
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">📷 После уборки — загрузите фото</p>
             {afterPhoto ? (
@@ -302,6 +319,18 @@ export default function MissionStart() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAfterPhoto(f); }}
             />
           </>
+        )}
+
+        {/* === STEP: Need Help Form === */}
+        {step === 'need_help' && beforeAnalysis && missionId && (
+          <NeedHelpForm
+            beforeAnalysis={beforeAnalysis}
+            beforePhoto={beforePhoto || ''}
+            missionId={missionId}
+            lat={lat}
+            lng={lng}
+            onPublished={() => navigate('/')}
+          />
         )}
 
         {/* === STEP: Analyzing After === */}

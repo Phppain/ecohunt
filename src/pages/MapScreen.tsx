@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth-context';
 import { toast } from 'sonner';
 import { CityProgressCard } from '@/components/map/CityProgressCard';
 import { reverseGeocode } from '@/lib/reverse-geocode';
+import { MissionDetailCard } from '@/components/mission/MissionDetailCard';
 
 interface Zone {
   id: string;
@@ -40,6 +41,15 @@ interface Mission {
   status: string;
   zone_id: string | null;
   mission_analysis: MissionAnalysis[];
+  is_help_request?: boolean;
+  severity_color?: string;
+  waste_category?: string;
+  description?: string;
+  volunteers_needed?: number;
+  time_estimate?: string;
+  tools_needed?: string[];
+  cleanup_progress_pct?: number;
+  before_photo_url?: string;
 }
 
 const problemDescriptions: Record<string, { icon: string; label: string; action: string }> = {
@@ -124,6 +134,7 @@ export default function MapScreen() {
 
   const [zones, setZones] = useState<Zone[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
+  const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -240,7 +251,7 @@ export default function MapScreen() {
     const fetchData = async () => {
       const [zonesRes, missionsRes] = await Promise.all([
         supabase.from('zones').select('*'),
-        supabase.from('missions').select('*, mission_analysis(*)').limit(50),
+        supabase.from('missions').select('*, mission_analysis(*)').limit(100),
       ]);
       if (zonesRes.data) setZones(zonesRes.data as Zone[]);
       if (missionsRes.data) setMissions(missionsRes.data as Mission[]);
@@ -467,7 +478,31 @@ export default function MapScreen() {
     }
   }, [zones, missions]);
 
-  // Mission markers removed - spots handle visualization now
+  // Help mission markers (orange/red pulsing dots)
+  const helpMarkersRef = useRef<L.Marker[]>([]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    helpMarkersRef.current.forEach(m => map.removeLayer(m));
+    helpMarkersRef.current = [];
+
+    const helpMissions = missions.filter(m => m.is_help_request && m.status !== 'CLEANED');
+    helpMissions.forEach(mission => {
+      const color = mission.severity_color === 'RED' ? '#ef4444' : '#f97316';
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:44px;height:44px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px ${color}40, 0 4px 12px ${color}60;animation:pulse 2s infinite;cursor:pointer">
+          <span style="font-size:20px">🆘</span>
+        </div>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      });
+      const marker = L.marker([mission.lat, mission.lng], { icon }).addTo(map);
+      marker.on('click', () => setSelectedMission(mission));
+      helpMarkersRef.current.push(marker);
+    });
+  }, [missions]);
 
   const handleRecenter = useCallback(() => {
     mapRef.current?.flyTo([position.lat, position.lng], 15, { duration: 0.8 });
@@ -526,6 +561,15 @@ export default function MapScreen() {
           improvementPct={missions.length > 0 ? Math.round((missions.filter(m => m.status === 'CLEANED').length / missions.length) * 100) : 0}
         />
       </div>
+
+      {/* Mission detail overlay */}
+      {selectedMission && (
+        <MissionDetailCard
+          mission={selectedMission}
+          onClose={() => setSelectedMission(null)}
+          onJoined={() => {}}
+        />
+      )}
     </div>
   );
 }

@@ -88,12 +88,22 @@ serve(async (req) => {
       });
     } else if (mode === "help_description") {
       const ctx = beforeData || {};
-      userPrompt = `На основе фото загрязнённой территории и данных анализа, сгенерируй подробное описание экологической проблемы для публикации. Категория мусора: ${ctx.category || 'не указана'}. Уровень: ${ctx.severity_color || 'ORANGE'}. Описание от пользователя: ${ctx.user_description || 'нет'}. Данные ИИ: ${JSON.stringify({ items: ctx.items, total_items: ctx.total_items, severity: ctx.severity, summary: ctx.summary })}. Используй инструмент generate_help_description.`;
+      userPrompt = `IMPORTANT: You MUST use the generate_help_description tool to respond. Do NOT use any other tool.
+
+На основе фото загрязнённой территории и данных анализа, сгенерируй подробное описание экологической проблемы для публикации на карте. 
+
+Категория мусора: ${ctx.category || 'не указана'}. 
+Уровень загрязнения: ${ctx.severity_color || 'ORANGE'}. 
+Описание от пользователя: ${ctx.user_description || 'нет'}. 
+
+Данные ИИ-анализа: предметов обнаружено: ${ctx.total_items || 'неизвестно'}, уровень: ${ctx.severity || 'неизвестно'}, краткое описание: ${ctx.summary || 'нет'}.
+
+Напиши подробное описание проблемы на русском языке (2-4 предложения), оцени количество волонтёров, время уборки и необходимые инструменты. Используй ТОЛЬКО инструмент generate_help_description.`;
       tools.push({
         type: "function",
         function: {
           name: "generate_help_description",
-          description: "Generate a structured mission description for a help request",
+          description: "Generate a structured mission description for a help request. This is the ONLY tool you should use.",
           parameters: {
             type: "object",
             properties: {
@@ -198,6 +208,12 @@ serve(async (req) => {
     }
 
     const result = JSON.parse(toolCall.function.arguments);
+    
+    // If help_description mode but got wrong tool result, adapt it
+    if (mode === "help_description" && !result.description && result.report) {
+      result.description = result.report;
+    }
+    
     return new Response(JSON.stringify({ mode, result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -64,8 +64,9 @@ export function NeedHelpForm({ beforeAnalysis, beforePhoto, missionId, lat, lng,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      if (data?.result?.description) {
-        setDescription(data.result.description);
+      const desc = data?.result?.description || data?.result?.report;
+      if (desc) {
+        setDescription(desc);
       }
     } catch (err: any) {
       toast.error(err.message || 'Ошибка генерации описания');

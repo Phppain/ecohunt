@@ -236,7 +236,7 @@ serve(async (req) => {
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      throw new Error(`AI error: ${status}`);
+      throw new Error(`AI error: ${status} - ${text}`);
     }
 
     const data = await response.json();

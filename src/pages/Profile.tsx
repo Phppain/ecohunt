@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Leaf, Zap, Flame, Target, Award, LogOut, Settings } from 'lucide-react';
+import { Leaf, Zap, Flame, Target, Award, LogOut, Settings, Trash2, Wind } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/integrations/supabase/client';
 import { EcoCard } from '@/components/eco/EcoCard';
@@ -40,18 +40,45 @@ export default function Profile() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [ecoStats, setEcoStats] = useState({ waste_kg: 0, co2_kg: 0, missions_count: 0 });
 
   useEffect(() => {
     if (!user) return;
-    const fetch = async () => {
+    const fetchData = async () => {
       const [profileRes, statsRes] = await Promise.all([
         supabase.from('profiles').select('username, avatar_url').eq('user_id', user.id).single(),
         supabase.from('user_stats').select('*').eq('user_id', user.id).single(),
       ]);
       if (profileRes.data) setProfile(profileRes.data as ProfileData);
       if (statsRes.data) setStats(statsRes.data as unknown as StatsData);
+
+      // Fetch eco stats (waste & CO2)
+      const { data: missions } = await supabase
+        .from('missions')
+        .select('id')
+        .eq('creator_id', user.id)
+        .eq('status', 'CLEANED');
+      
+      const missionIds = (missions || []).map(m => m.id);
+      if (missionIds.length > 0) {
+        const { data: analyses } = await supabase
+          .from('mission_analysis')
+          .select('waste_diverted_kg, co2_saved_kg')
+          .in('mission_id', missionIds);
+        
+        let wasteKg = 0, co2Kg = 0;
+        (analyses || []).forEach(a => {
+          wasteKg += a.waste_diverted_kg;
+          co2Kg += a.co2_saved_kg;
+        });
+        setEcoStats({
+          waste_kg: Math.round(wasteKg * 10) / 10,
+          co2_kg: Math.round(co2Kg * 10) / 10,
+          missions_count: missionIds.length,
+        });
+      }
     };
-    fetch();
+    fetchData();
   }, [user]);
 
   if (!user) {
@@ -114,6 +141,25 @@ export default function Profile() {
             <Target className="w-5 h-5 text-eco-blue mx-auto mb-1" />
             <p className="text-lg font-bold text-foreground">{s.monthly_points}</p>
             <p className="text-[10px] text-muted-foreground">This Month</p>
+          </EcoCard>
+        </div>
+
+        {/* Eco Impact */}
+        <div className="grid grid-cols-3 gap-3">
+          <EcoCard variant="elevated" className="text-center py-4">
+            <Trash2 className="w-5 h-5 text-eco-orange mx-auto mb-1" />
+            <p className="text-lg font-bold text-foreground">{ecoStats.waste_kg}</p>
+            <p className="text-[10px] text-muted-foreground">кг убрано</p>
+          </EcoCard>
+          <EcoCard variant="elevated" className="text-center py-4">
+            <Wind className="w-5 h-5 text-primary mx-auto mb-1" />
+            <p className="text-lg font-bold text-foreground">{ecoStats.co2_kg}</p>
+            <p className="text-[10px] text-muted-foreground">кг CO₂</p>
+          </EcoCard>
+          <EcoCard variant="elevated" className="text-center py-4">
+            <Target className="w-5 h-5 text-eco-green mx-auto mb-1" />
+            <p className="text-lg font-bold text-foreground">{ecoStats.missions_count}</p>
+            <p className="text-[10px] text-muted-foreground">Миссий</p>
           </EcoCard>
         </div>
 

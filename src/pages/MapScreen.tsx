@@ -362,7 +362,7 @@ export default function MapScreen() {
       {/* Bottom progress card */}
       <div className="absolute bottom-20 left-4 right-4 z-[1000]">
         <CityProgressCard
-          totalMissions={missions.length}
+          totalMissions={missions.filter(m => m.status !== 'CLEANED').length}
           cleanedMissions={missions.filter(m => m.status === 'CLEANED').length}
           zonesCount={zones.length}
           improvementPct={missions.length > 0 ? Math.round((missions.filter(m => m.status === 'CLEANED').length / missions.length) * 100) : 0}

@@ -11,8 +11,9 @@ interface CityProgressCardProps {
 
 export function CityProgressCard({ totalMissions, cleanedMissions, zonesCount, improvementPct }: CityProgressCardProps) {
   const [visible, setVisible] = useState(true);
-  const activePollutionPoints = totalMissions - cleanedMissions;
-  const cleanPct = totalMissions > 0 ? Math.round((cleanedMissions / totalMissions) * 100) : 0;
+  const activePollutionPoints = totalMissions; // totalMissions now = only uncleaned
+  const allMissions = totalMissions + cleanedMissions;
+  const cleanPct = allMissions > 0 ? Math.round((cleanedMissions / allMissions) * 100) : 0;
   const isImproving = cleanedMissions > 0;
 
   if (!visible) return null;
@@ -74,7 +75,7 @@ export function CityProgressCard({ totalMissions, cleanedMissions, zonesCount, i
         />
       </div>
       <div className="flex justify-between mt-1">
-        <span className="text-[10px] text-muted-foreground">{cleanedMissions} из {totalMissions} миссий выполнено</span>
+        <span className="text-[10px] text-muted-foreground">{cleanedMissions} из {allMissions} миссий выполнено</span>
         <span className="text-[10px] text-muted-foreground">{zonesCount} зон</span>
       </div>
     </EcoCard>

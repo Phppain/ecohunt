@@ -47,29 +47,44 @@ export function NeedHelpForm({ beforeAnalysis, beforePhoto, missionId, lat, lng,
   const actualCategory = selectedCategory === 'custom' ? customCategory : 
     WASTE_CATEGORIES.find(c => c.id === selectedCategory)?.label || '';
 
+  const buildFallbackDescription = () => {
+    const volunteersNeeded = severityColor === 'RED' ? 10 : 5;
+    const timeEstimate = severityColor === 'RED' ? '3-5 часов' : '1-2 часа';
+    const categoryLabel = actualCategory || 'Смешанный мусор';
+    return `На участке обнаружено загрязнение категории «${categoryLabel}» (${beforeAnalysis.total_items} ед., уровень ${beforeAnalysis.severity}). Требуется командная уборка с сортировкой отходов и безопасным вывозом. Оценочно нужно ${volunteersNeeded} волонтёров, время работ — ${timeEstimate}.`;
+  };
+
   const handleAIGenerate = async () => {
     setGeneratingAI(true);
     try {
-      const { data, error } = await supabase.functions.invoke('analyze-waste', {
-        body: {
-          imageBase64: beforePhoto,
-          mode: 'help_description',
-          beforeData: {
-            ...beforeAnalysis,
-            category: actualCategory,
-            severity_color: severityColor,
-            user_description: description,
+      const response = await Promise.race([
+        supabase.functions.invoke('analyze-waste', {
+          body: {
+            mode: 'help_description',
+            beforeData: {
+              ...beforeAnalysis,
+              category: actualCategory,
+              severity_color: severityColor,
+              user_description: description,
+            },
           },
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      const desc = data?.result?.description || data?.result?.report;
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI_TIMEOUT')), 15000)
+        ),
+      ]) as { data?: any; error?: any };
+
+      if (response?.error) throw response.error;
+      if (response?.data?.error) throw new Error(response.data.error);
+      const desc = response?.data?.result?.description || response?.data?.result?.report;
       if (desc) {
         setDescription(desc);
+      } else {
+        setDescription(buildFallbackDescription());
       }
     } catch (err: any) {
-      toast.error(err.message || 'Ошибка генерации описания');
+      setDescription((prev) => prev.trim() || buildFallbackDescription());
+      toast.error(err?.message === 'AI_TIMEOUT' ? 'ИИ отвечает слишком долго, подставил черновик описания' : (err.message || 'Ошибка генерации описания'));
     } finally {
       setGeneratingAI(false);
     }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingDown, TrendingUp, Sparkles, X } from 'lucide-react';
+import { TrendingDown, TrendingUp, Sparkles, X, MapPin, CheckCircle } from 'lucide-react';
 import { EcoCard } from '@/components/eco/EcoCard';
 
 interface CityProgressCardProps {
@@ -11,7 +11,9 @@ interface CityProgressCardProps {
 
 export function CityProgressCard({ totalMissions, cleanedMissions, zonesCount, improvementPct }: CityProgressCardProps) {
   const [visible, setVisible] = useState(true);
-  const isImproving = improvementPct > 0;
+  const activePollutionPoints = totalMissions - cleanedMissions;
+  const cleanPct = totalMissions > 0 ? Math.round((cleanedMissions / totalMissions) * 100) : 0;
+  const isImproving = cleanedMissions > 0;
 
   if (!visible) return null;
 
@@ -42,15 +44,22 @@ export function CityProgressCard({ totalMissions, cleanedMissions, zonesCount, i
               {isImproving ? 'Город становится чище!' : 'Нужна помощь!'}
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {cleanedMissions}/{totalMissions} миссий · {zonesCount} зон
-          </p>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-destructive" />
+              {activePollutionPoints} загрязнений
+            </span>
+            <span className="flex items-center gap-1">
+              <CheckCircle className="w-3 h-3 text-primary" />
+              {cleanedMissions} очищено
+            </span>
+          </div>
         </div>
         <div className="text-right">
           <div className={`text-lg font-bold ${isImproving ? 'text-primary' : 'text-destructive'}`}>
-            {isImproving ? '-' : '+'}{Math.abs(improvementPct)}%
+            {cleanPct}%
           </div>
-          <p className="text-[10px] text-muted-foreground">за 7 дней</p>
+          <p className="text-[10px] text-muted-foreground">чистота</p>
         </div>
       </div>
 
@@ -59,10 +68,14 @@ export function CityProgressCard({ totalMissions, cleanedMissions, zonesCount, i
         <div
           className="h-full rounded-full transition-all duration-1000 ease-out"
           style={{
-            width: `${totalMissions > 0 ? (cleanedMissions / totalMissions) * 100 : 0}%`,
+            width: `${cleanPct}%`,
             background: 'linear-gradient(90deg, hsl(var(--primary)), hsl(142, 71%, 65%))',
           }}
         />
+      </div>
+      <div className="flex justify-between mt-1">
+        <span className="text-[10px] text-muted-foreground">{cleanedMissions} из {totalMissions} миссий выполнено</span>
+        <span className="text-[10px] text-muted-foreground">{zonesCount} зон</span>
       </div>
     </EcoCard>
   );

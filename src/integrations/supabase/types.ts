@@ -128,38 +128,100 @@ export type Database = {
           },
         ]
       }
+      mission_participants: {
+        Row: {
+          contribution_pct: number | null
+          id: string
+          joined_at: string
+          mission_id: string
+          points_earned: number | null
+          user_id: string
+        }
+        Insert: {
+          contribution_pct?: number | null
+          id?: string
+          joined_at?: string
+          mission_id: string
+          points_earned?: number | null
+          user_id: string
+        }
+        Update: {
+          contribution_pct?: number | null
+          id?: string
+          joined_at?: string
+          mission_id?: string
+          points_earned?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mission_participants_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       missions: {
         Row: {
+          before_photo_url: string | null
+          cleanup_progress_pct: number | null
           created_at: string
           creator_id: string
+          description: string | null
           id: string
+          is_help_request: boolean | null
           lat: number
           lng: number
+          severity_color: string | null
           status: Database["public"]["Enums"]["mission_status"]
+          time_estimate: string | null
           title: string | null
+          tools_needed: string[] | null
           updated_at: string
+          volunteers_needed: number | null
+          waste_category: string | null
           zone_id: string | null
         }
         Insert: {
+          before_photo_url?: string | null
+          cleanup_progress_pct?: number | null
           created_at?: string
           creator_id: string
+          description?: string | null
           id?: string
+          is_help_request?: boolean | null
           lat: number
           lng: number
+          severity_color?: string | null
           status?: Database["public"]["Enums"]["mission_status"]
+          time_estimate?: string | null
           title?: string | null
+          tools_needed?: string[] | null
           updated_at?: string
+          volunteers_needed?: number | null
+          waste_category?: string | null
           zone_id?: string | null
         }
         Update: {
+          before_photo_url?: string | null
+          cleanup_progress_pct?: number | null
           created_at?: string
           creator_id?: string
+          description?: string | null
           id?: string
+          is_help_request?: boolean | null
           lat?: number
           lng?: number
+          severity_color?: string | null
           status?: Database["public"]["Enums"]["mission_status"]
+          time_estimate?: string | null
           title?: string | null
+          tools_needed?: string[] | null
           updated_at?: string
+          volunteers_needed?: number | null
+          waste_category?: string | null
           zone_id?: string | null
         }
         Relationships: [

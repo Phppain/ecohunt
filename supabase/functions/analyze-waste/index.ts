@@ -86,6 +86,26 @@ serve(async (req) => {
           },
         },
       });
+    } else if (mode === "help_description") {
+      const ctx = beforeData || {};
+      userPrompt = `На основе фото загрязнённой территории и данных анализа, сгенерируй подробное описание экологической проблемы для публикации. Категория мусора: ${ctx.category || 'не указана'}. Уровень: ${ctx.severity_color || 'ORANGE'}. Описание от пользователя: ${ctx.user_description || 'нет'}. Данные ИИ: ${JSON.stringify({ items: ctx.items, total_items: ctx.total_items, severity: ctx.severity, summary: ctx.summary })}. Используй инструмент generate_help_description.`;
+      tools.push({
+        type: "function",
+        function: {
+          name: "generate_help_description",
+          description: "Generate a structured mission description for a help request",
+          parameters: {
+            type: "object",
+            properties: {
+              description: { type: "string", description: "Detailed description of the pollution problem, 2-4 sentences in Russian" },
+              volunteers_needed: { type: "integer", description: "Estimated number of volunteers needed" },
+              time_estimate: { type: "string", description: "Estimated cleanup time, e.g. '2-3 часа'" },
+              tools_needed: { type: "array", items: { type: "string" }, description: "List of tools/equipment needed in Russian" },
+            },
+            required: ["description", "volunteers_needed", "time_estimate", "tools_needed"],
+          },
+        },
+      });
     } else {
       userPrompt = `Analyze this AFTER photo. The BEFORE analysis found: ${JSON.stringify(beforeData)}. Compare the before and after, determine how many items were removed, calculate earned EcoPoints, improvement percentage, and write a short report. Use the report_after_analysis tool.`;
       tools.push({
@@ -123,7 +143,7 @@ serve(async (req) => {
       });
     }
 
-    const toolName = mode === "before" ? "report_before_analysis" : "report_after_analysis";
+    const toolName = mode === "before" ? "report_before_analysis" : mode === "help_description" ? "generate_help_description" : "report_after_analysis";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

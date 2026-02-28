@@ -255,19 +255,37 @@ export default function MapScreen() {
     const map = mapRef.current;
     if (!map) return;
 
-    zoneCirclesRef.current.forEach(c => map.removeLayer(c));
-    zoneCirclesRef.current = [];
-    zoneLabelLayersRef.current.forEach(l => map.removeLayer(l));
-    zoneLabelLayersRef.current = [];
-    if (pollutionSpotsRef.current) pollutionSpotsRef.current.clearLayers();
+    // Clear previous mission markers
+    missionMarkersRef.current.forEach(m => map.removeLayer(m));
+    missionMarkersRef.current = [];
 
-    if (heatLayerRef.current) {
-      map.removeLayer(heatLayerRef.current);
-      heatLayerRef.current = null;
-    }
-
-    // Render only real mission points — no heatmap, no zone circles
+    // Render only uncleaned missions as markers
     const processedMissionIds = new Set<string>();
+
+    const addMissionMarker = (mission: Mission, color: string) => {
+      if (mission.status === 'CLEANED') return;
+      if (mission.lat === 0 && mission.lng === 0) return;
+
+      const isHelp = mission.is_help_request;
+      const markerColor = isHelp 
+        ? (mission.severity_color === 'RED' ? '#ef4444' : '#f97316') 
+        : color;
+      const emoji = isHelp ? '🆘' : '⚠️';
+      const size = isHelp ? 32 : 28;
+
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${markerColor};display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px ${markerColor}35, 0 0 12px ${markerColor}50;cursor:pointer;${isHelp ? 'animation:pulse 2s infinite;' : ''}">
+          <span style="font-size:${size * 0.45}px">${emoji}</span>
+        </div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+      });
+
+      const marker = L.marker([mission.lat, mission.lng], { icon }).addTo(map);
+      marker.on('click', () => setSelectedMission(mission));
+      missionMarkersRef.current.push(marker);
+    };
 
     zones.forEach(zone => {
       const matchedMissions = missions.filter(m => {
@@ -280,129 +298,18 @@ export default function MapScreen() {
 
       matchedMissions.forEach(mission => {
         processedMissionIds.add(mission.id);
-        const analysis = mission.mission_analysis?.[0];
-        const difficulty = analysis?.difficulty || 'MODERATE';
-        const prob = problemDescriptions[difficulty] || problemDescriptions.MODERATE;
-        const isCleaned = mission.status === 'CLEANED';
-        const spotColor = isCleaned ? '#22c55e' : severityColor[zone.severity];
-
-        const spot = L.circleMarker([mission.lat, mission.lng], {
-          radius: isCleaned ? 5 : (difficulty === 'HARD' ? 7 : difficulty === 'MODERATE' ? 6 : 5),
-          color: spotColor, fillColor: spotColor,
-          fillOpacity: isCleaned ? 0.3 : 0.7,
-          weight: isCleaned ? 1 : 2,
-          opacity: isCleaned ? 0.5 : 0.9,
-        });
-
-        const popup = L.popup({ minWidth: 220 });
-        spot.bindPopup(popup);
-        spot.on('popupopen', async () => {
-          popup.setContent('<div style="font-family:system-ui;text-align:center;padding:12px"><span style="color:#94a3b8">📍 Определяем адрес...</span></div>');
-          const address = await reverseGeocode(mission.lat, mission.lng);
-          const itemsBefore = analysis?.items_before ?? '—';
-          const wasteDiverted = analysis?.waste_diverted_kg?.toFixed(1) ?? '—';
-
-          popup.setContent(`
-            <div style="font-family:system-ui;min-width:220px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-                <span style="font-size:22px">${isCleaned ? '✅' : prob.icon}</span>
-                <div>
-                  <strong style="font-size:13px;display:block">${isCleaned ? 'Убрано!' : prob.label}</strong>
-                  <span style="font-size:11px;color:#64748b">📍 ${address}</span>
-                </div>
-              </div>
-              <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:6px">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
-                  <div>Предметов: <strong>${itemsBefore}</strong></div>
-                  <div>Вывезено: <strong>${wasteDiverted} кг</strong></div>
-                </div>
-              </div>
-              ${!isCleaned ? `<div style="background:#fef3c7;border-radius:8px;padding:8px;font-size:11px"><strong style="color:#92400e">🛠 ${prob.action}</strong></div>` : `<div style="background:#dcfce7;border-radius:8px;padding:8px;font-size:11px;color:#166534">✨ Проблема решена!</div>`}
-            </div>
-          `);
-        });
-
-        if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
+        addMissionMarker(mission, severityColor[zone.severity] || '#f97316');
       });
     });
 
-    // Also render missions without a zone
+    // Missions without a zone
     missions.forEach(mission => {
       if (processedMissionIds.has(mission.id)) return;
-      if (mission.lat === 0 && mission.lng === 0) return;
       processedMissionIds.add(mission.id);
-
-      const analysis = mission.mission_analysis?.[0];
-      const difficulty = analysis?.difficulty || 'MODERATE';
-      const prob = problemDescriptions[difficulty] || problemDescriptions.MODERATE;
-      const isCleaned = mission.status === 'CLEANED';
-      const spotColor = isCleaned ? '#22c55e' : (mission.severity_color ? severityColor[mission.severity_color] || '#f97316' : '#f97316');
-
-      const spot = L.circleMarker([mission.lat, mission.lng], {
-        radius: isCleaned ? 5 : (difficulty === 'HARD' ? 7 : difficulty === 'MODERATE' ? 6 : 5),
-        color: spotColor, fillColor: spotColor,
-        fillOpacity: isCleaned ? 0.3 : 0.7,
-        weight: isCleaned ? 1 : 2,
-        opacity: isCleaned ? 0.5 : 0.9,
-      });
-
-      const popup = L.popup({ minWidth: 220 });
-      spot.bindPopup(popup);
-      spot.on('popupopen', async () => {
-        popup.setContent('<div style="font-family:system-ui;text-align:center;padding:12px"><span style="color:#94a3b8">📍 Определяем адрес...</span></div>');
-        const address = await reverseGeocode(mission.lat, mission.lng);
-        const itemsBefore = analysis?.items_before ?? '—';
-        const wasteDiverted = analysis?.waste_diverted_kg?.toFixed(1) ?? '—';
-
-        popup.setContent(`
-          <div style="font-family:system-ui;min-width:220px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-              <span style="font-size:22px">${isCleaned ? '✅' : prob.icon}</span>
-              <div>
-                <strong style="font-size:13px;display:block">${isCleaned ? 'Убрано!' : prob.label}</strong>
-                <span style="font-size:11px;color:#64748b">📍 ${address}</span>
-              </div>
-            </div>
-            <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:6px">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
-                <div>Предметов: <strong>${itemsBefore}</strong></div>
-                <div>Вывезено: <strong>${wasteDiverted} кг</strong></div>
-              </div>
-            </div>
-            ${!isCleaned ? `<div style="background:#fef3c7;border-radius:8px;padding:8px;font-size:11px"><strong style="color:#92400e">🛠 ${prob.action}</strong></div>` : `<div style="background:#dcfce7;border-radius:8px;padding:8px;font-size:11px;color:#166534">✨ Проблема решена!</div>`}
-          </div>
-        `);
-      });
-
-      if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
+      const color = mission.severity_color ? severityColor[mission.severity_color] || '#f97316' : '#f97316';
+      addMissionMarker(mission, color);
     });
   }, [zones, missions]);
-
-  // Help mission markers (orange/red pulsing dots)
-  const helpMarkersRef = useRef<L.Marker[]>([]);
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    helpMarkersRef.current.forEach(m => map.removeLayer(m));
-    helpMarkersRef.current = [];
-
-    const helpMissions = missions.filter(m => m.is_help_request && m.status !== 'CLEANED');
-    helpMissions.forEach(mission => {
-      const color = mission.severity_color === 'RED' ? '#ef4444' : '#f97316';
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px ${color}40, 0 2px 6px ${color}60;animation:pulse 2s infinite;cursor:pointer">
-          <span style="font-size:11px">🆘</span>
-        </div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
-      const marker = L.marker([mission.lat, mission.lng], { icon }).addTo(map);
-      marker.on('click', () => setSelectedMission(mission));
-      helpMarkersRef.current.push(marker);
-    });
-  }, [missions]);
 
   const handleRecenter = useCallback(() => {
     mapRef.current?.flyTo([position.lat, position.lng], 15, { duration: 0.8 });

@@ -266,21 +266,20 @@ export default function MapScreen() {
       heatLayerRef.current = null;
     }
 
-    const severityIntensity: Record<string, number> = { GREEN: 0.25, YELLOW: 0.55, RED: 0.9 };
-    const severityEmoji: Record<string, string> = { GREEN: '✅', YELLOW: '⚠️', RED: '🔴' };
-    const heatPoints: [number, number, number][] = [];
+    // Render only real mission points — no heatmap, no zone circles
+    const processedMissionIds = new Set<string>();
 
-    // Render all missions as small precise markers
     zones.forEach(zone => {
-      // === Real mission spots ===
       const matchedMissions = missions.filter(m => {
         if (m.lat === 0 && m.lng === 0) return false;
+        if (processedMissionIds.has(m.id)) return false;
         if (m.zone_id === zone.id) return true;
         if (!m.zone_id) return findNearestZone(m.lat, m.lng, zones)?.id === zone.id;
         return false;
       });
 
       matchedMissions.forEach(mission => {
+        processedMissionIds.add(mission.id);
         const analysis = mission.mission_analysis?.[0];
         const difficulty = analysis?.difficulty || 'MODERATE';
         const prob = problemDescriptions[difficulty] || problemDescriptions.MODERATE;
@@ -325,55 +324,58 @@ export default function MapScreen() {
 
         if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
       });
-
-      // Heatmap points from real missions
-      const zoneMissions = missions.filter(m => m.zone_id === zone.id);
-      const cleaned = zoneMissions.filter(m => m.status === 'CLEANED').length;
-      const total = zoneMissions.length;
-      const pct = total > 0 ? Math.round((cleaned / total) * 100) : 0;
-      const intensity = severityIntensity[zone.severity] ?? 0.5;
-      const adjustedIntensity = intensity * (1 - pct / 100 * 0.7);
-      const numPoints = Math.ceil((zone.radius_m / 50) * (adjustedIntensity * 3));
-      for (let i = 0; i < numPoints; i++) {
-        const angle = Math.random() * 2 * Math.PI;
-        const r = Math.random() * (zone.radius_m / 111000);
-        const lat = zone.center_lat + r * Math.cos(angle);
-        const lng = zone.center_lng + r * Math.sin(angle) / Math.cos(zone.center_lat * Math.PI / 180);
-        heatPoints.push([lat, lng, adjustedIntensity]);
-      }
     });
 
-    missions.filter(m => m.status === 'CLEANED').forEach(m => {
-      heatPoints.push([m.lat, m.lng, -0.3]);
-    });
+    // Also render missions without a zone
+    missions.forEach(mission => {
+      if (processedMissionIds.has(mission.id)) return;
+      if (mission.lat === 0 && mission.lng === 0) return;
+      processedMissionIds.add(mission.id);
 
-    missions.filter(m => m.status !== 'CLEANED').forEach(m => {
-      if (m.lat !== 0 && m.lng !== 0) {
-        heatPoints.push([m.lat, m.lng, 0.7]);
-      }
-    });
+      const analysis = mission.mission_analysis?.[0];
+      const difficulty = analysis?.difficulty || 'MODERATE';
+      const prob = problemDescriptions[difficulty] || problemDescriptions.MODERATE;
+      const isCleaned = mission.status === 'CLEANED';
+      const spotColor = isCleaned ? '#22c55e' : (mission.severity_color ? severityColor[mission.severity_color] || '#f97316' : '#f97316');
 
-    if (heatPoints.length > 0) {
-      const heat = L.heatLayer(
-        heatPoints.filter(p => p[2] > 0),
-        {
-          radius: 30,
-          blur: 20,
-          maxZoom: 17,
-          max: 1,
-          minOpacity: 0.15,
-          gradient: {
-            0.1: '#10b981',
-            0.3: '#fbbf24',
-            0.5: '#f97316',
-            0.7: '#ef4444',
-            0.9: '#dc2626',
-            1.0: '#991b1b',
-          },
-        }
-      ).addTo(map);
-      heatLayerRef.current = heat;
-    }
+      const spot = L.circleMarker([mission.lat, mission.lng], {
+        radius: isCleaned ? 5 : (difficulty === 'HARD' ? 7 : difficulty === 'MODERATE' ? 6 : 5),
+        color: spotColor, fillColor: spotColor,
+        fillOpacity: isCleaned ? 0.3 : 0.7,
+        weight: isCleaned ? 1 : 2,
+        opacity: isCleaned ? 0.5 : 0.9,
+      });
+
+      const popup = L.popup({ minWidth: 220 });
+      spot.bindPopup(popup);
+      spot.on('popupopen', async () => {
+        popup.setContent('<div style="font-family:system-ui;text-align:center;padding:12px"><span style="color:#94a3b8">📍 Определяем адрес...</span></div>');
+        const address = await reverseGeocode(mission.lat, mission.lng);
+        const itemsBefore = analysis?.items_before ?? '—';
+        const wasteDiverted = analysis?.waste_diverted_kg?.toFixed(1) ?? '—';
+
+        popup.setContent(`
+          <div style="font-family:system-ui;min-width:220px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+              <span style="font-size:22px">${isCleaned ? '✅' : prob.icon}</span>
+              <div>
+                <strong style="font-size:13px;display:block">${isCleaned ? 'Убрано!' : prob.label}</strong>
+                <span style="font-size:11px;color:#64748b">📍 ${address}</span>
+              </div>
+            </div>
+            <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:6px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">
+                <div>Предметов: <strong>${itemsBefore}</strong></div>
+                <div>Вывезено: <strong>${wasteDiverted} кг</strong></div>
+              </div>
+            </div>
+            ${!isCleaned ? `<div style="background:#fef3c7;border-radius:8px;padding:8px;font-size:11px"><strong style="color:#92400e">🛠 ${prob.action}</strong></div>` : `<div style="background:#dcfce7;border-radius:8px;padding:8px;font-size:11px;color:#166534">✨ Проблема решена!</div>`}
+          </div>
+        `);
+      });
+
+      if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
+    });
   }, [zones, missions]);
 
   // Help mission markers (orange/red pulsing dots)

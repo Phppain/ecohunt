@@ -88,10 +88,22 @@ export default function Leaderboard() {
 
       {/* Top 3 Podium */}
       <div className="px-4 -mt-10">
-        {top3.length >= 3 ? (
+        {top3.length > 0 ? (
           <div className="flex items-end justify-center gap-3 mb-6">
             {podiumOrder.map((idx) => {
               const leader = top3[idx];
+              if (!leader) {
+                // Empty podium slot
+                return (
+                  <div key={`empty-${idx}`} className="flex flex-col items-center">
+                    <div className="w-5 h-5 mb-1" />
+                    <div className={`${idx === 0 ? 'w-20 h-20' : 'w-16 h-16'} rounded-2xl bg-card/50 border-2 border-dashed border-border flex items-center justify-center`}>
+                      <span className="text-muted-foreground text-xs">#{idx + 1}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">—</p>
+                  </div>
+                );
+              }
               const isFirst = idx === 0;
               return (
                 <div key={idx} className={`flex flex-col items-center ${isFirst ? 'mb-4' : ''}`}>

@@ -4,6 +4,7 @@ import { EcoButton } from '@/components/eco/EcoButton';
 import { EcoCard } from '@/components/eco/EcoCard';
 import { Leaf, Mail, Lock, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import logo from '@/assets/logo.jpeg';
 
 export default function Auth() {
@@ -22,7 +23,18 @@ export default function Auth() {
     setLoading(true);
     try {
       if (isSignUp) {
-        await signUp(email, password, username);
+        // Check username uniqueness
+        const { data: existing } = await supabase
+          .from('profiles')
+          .select('id')
+          .ilike('username', username.trim())
+          .maybeSingle();
+        if (existing) {
+          setError('Этот никнейм уже занят. Выберите другой.');
+          setLoading(false);
+          return;
+        }
+        await signUp(email, password, username.trim());
       } else {
         await signIn(email, password);
       }

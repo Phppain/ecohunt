@@ -165,6 +165,10 @@ export default function Leaderboard() {
                 <span className="text-[10px] text-eco-yellow font-medium">🟡{entry.yellow_missions}</span>
                 <span className="text-[10px] text-eco-red font-medium">🔴{entry.red_missions}</span>
               </div>
+              <div className="flex gap-2 mt-0.5">
+                <span className="text-[10px] text-muted-foreground">🗑️ {entry.waste_kg} кг</span>
+                <span className="text-[10px] text-muted-foreground">🌿 {entry.co2_kg} кг CO₂</span>
+              </div>
             </div>
             <div className="text-right">
               <p className="text-sm font-bold text-foreground">{entry.points}</p>

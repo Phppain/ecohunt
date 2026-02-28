@@ -1,6 +1,7 @@
 import { Map, Trophy, User, Plus } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const navItems = [
   { icon: Map, label: 'Map', path: '/' },
@@ -17,11 +18,15 @@ export function BottomNav() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => navigate('/mission-start', { state: { lat: pos.coords.latitude, lng: pos.coords.longitude } }),
-        () => navigate('/mission-start', { state: { lat: 43.238949, lng: 76.945465 } }),
+        () => {
+          toast.error('Включите геолокацию для создания миссии');
+          navigate('/mission-start');
+        },
         { enableHighAccuracy: true, timeout: 5000 }
       );
     } else {
-      navigate('/mission-start', { state: { lat: 43.238949, lng: 76.945465 } });
+      toast.error('Геолокация не поддерживается');
+      navigate('/mission-start');
     }
   };
 

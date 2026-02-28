@@ -14,6 +14,7 @@ export interface NearbyUser {
   updated_at: string;
 }
 
+// Only broadcasts and fetches when real position is available
 export function useNearbyUsers(myPosition: GeoPosition | null) {
   const { user } = useAuth();
   const [users, setUsers] = useState<NearbyUser[]>([]);

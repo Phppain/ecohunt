@@ -6,18 +6,18 @@ export interface GeoPosition {
   accuracy?: number;
 }
 
-// Fallback: Almaty
-const FALLBACK: GeoPosition = { lat: 43.238949, lng: 76.945465 };
+// Default map center (Almaty) — NOT a real user position
+export const DEFAULT_MAP_CENTER: GeoPosition = { lat: 43.238949, lng: 76.945465 };
 
 export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanceFilter?: number }) {
+  // null means "no real position yet"
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
-  const hasEverSucceeded = useRef(false);
   const watchIdRef = useRef<number | null>(null);
   const lastPos = useRef<GeoPosition | null>(null);
-  const positionRef = useRef<GeoPosition | null>(null);
 
   const distanceFilter = options?.distanceFilter ?? 5;
   const enableHighAccuracy = options?.enableHighAccuracy ?? true;
@@ -43,8 +43,7 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
     if (!navigator.geolocation) {
       if (mountedRef.current) {
         setError('Geolocation not supported');
-        setPosition(FALLBACK);
-        positionRef.current = FALLBACK;
+        setLoading(false);
       }
       return;
     }
@@ -55,26 +54,27 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           if (!mountedRef.current) return;
-          const newPos: GeoPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+          const newPos: GeoPosition = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          };
           if (!lastPos.current || haversineDistance(lastPos.current, newPos) >= distanceFilter) {
             lastPos.current = newPos;
-            positionRef.current = newPos;
             setPosition(newPos);
           }
           setError(null);
           setPermissionDenied(false);
-          hasEverSucceeded.current = true;
+          setLoading(false);
         },
         (err) => {
           if (!mountedRef.current) return;
-          if (err.code === err.PERMISSION_DENIED && !hasEverSucceeded.current) {
+          if (err.code === err.PERMISSION_DENIED) {
             setPermissionDenied(true);
           }
           setError(err.message);
-          if (!positionRef.current) {
-            positionRef.current = FALLBACK;
-            setPosition(FALLBACK);
-          }
+          setLoading(false);
+          // position stays null — no fake coordinates
         },
         { enableHighAccuracy, maximumAge: 5000, timeout: 10000 }
       );
@@ -82,10 +82,7 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
       if (mountedRef.current) {
         console.warn('Geolocation watch failed:', e);
         setError('Failed to start geolocation');
-        if (!positionRef.current) {
-          positionRef.current = FALLBACK;
-          setPosition(FALLBACK);
-        }
+        setLoading(false);
       }
     }
   }, [distanceFilter, enableHighAccuracy, clearWatch]);
@@ -103,14 +100,28 @@ export function useGeolocation(options?: { enableHighAccuracy?: boolean; distanc
     if (!mountedRef.current) return;
     setPermissionDenied(false);
     setError(null);
+    setLoading(true);
     startWatching();
   }, [startWatching]);
 
   const dismissPermission = useCallback(() => {
     if (!mountedRef.current) return;
     setPermissionDenied(false);
-    hasEverSucceeded.current = true; // prevent it from showing again
   }, []);
 
-  return { position: position ?? FALLBACK, error, permissionDenied, requestPermission, dismissPermission };
+  // mapCenter: real position if available, otherwise default
+  const mapCenter = position ?? DEFAULT_MAP_CENTER;
+  // hasRealPosition: true only when we have actual device coordinates
+  const hasRealPosition = position !== null;
+
+  return {
+    position,        // null if no real position
+    mapCenter,       // always valid coords for map display
+    hasRealPosition, // boolean flag
+    loading,
+    error,
+    permissionDenied,
+    requestPermission,
+    dismissPermission,
+  };
 }

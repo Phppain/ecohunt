@@ -138,7 +138,7 @@ export default function MapScreen() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const { position, permissionDenied, requestPermission, dismissPermission } = useGeolocation({ enableHighAccuracy: true, distanceFilter: 5 });
+  const { position, mapCenter, hasRealPosition, loading: geoLoading, permissionDenied, requestPermission, dismissPermission } = useGeolocation({ enableHighAccuracy: true, distanceFilter: 5 });
   const { nearbyUsers } = useNearbyUsers(position);
 
   // Initialize map
@@ -147,7 +147,7 @@ export default function MapScreen() {
     initializedRef.current = true;
 
     const map = L.map(mapContainerRef.current, {
-      center: [position.lat, position.lng],
+      center: [mapCenter.lat, mapCenter.lng],
       zoom: 14,
       zoomControl: false,
       attributionControl: false,
@@ -156,10 +156,12 @@ export default function MapScreen() {
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', { opacity: 0.7 }).addTo(map);
 
-    // My marker
-    const myMarker = L.marker([position.lat, position.lng], { icon: createUserDivIcon('Me', true) }).addTo(map);
-    myMarker.bindPopup('Вы здесь');
-    myMarkerRef.current = myMarker;
+    // My marker — only add if we have real position
+    if (hasRealPosition && position) {
+      const myMarker = L.marker([position.lat, position.lng], { icon: createUserDivIcon('Me', true) }).addTo(map);
+      myMarker.bindPopup('Вы здесь');
+      myMarkerRef.current = myMarker;
+    }
 
     // Click to create mission
     map.on('click', (e: L.LeafletMouseEvent) => {
@@ -198,12 +200,21 @@ export default function MapScreen() {
     };
   }, []);
 
-  // Update my position
+  // Update my position — only when real position exists
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !position) return;
+
     if (myMarkerRef.current) {
       myMarkerRef.current.setLatLng([position.lat, position.lng]);
+    } else {
+      // First real position arrived after map init — create marker and fly to it
+      const myMarker = L.marker([position.lat, position.lng], { icon: createUserDivIcon('Me', true) }).addTo(map);
+      myMarker.bindPopup('Вы здесь');
+      myMarkerRef.current = myMarker;
+      map.flyTo([position.lat, position.lng], 15, { duration: 1 });
     }
-  }, [position.lat, position.lng]);
+  }, [position?.lat, position?.lng]);
 
   // Update nearby user markers
   useEffect(() => {
@@ -312,8 +323,10 @@ export default function MapScreen() {
   }, [zones, missions]);
 
   const handleRecenter = useCallback(() => {
-    mapRef.current?.flyTo([position.lat, position.lng], 15, { duration: 0.8 });
-  }, [position.lat, position.lng]);
+    if (position) {
+      mapRef.current?.flyTo([position.lat, position.lng], 15, { duration: 0.8 });
+    }
+  }, [position?.lat, position?.lng]);
 
   return (
     <div className="relative h-screen w-full overflow-hidden">

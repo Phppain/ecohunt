@@ -186,20 +186,9 @@ export default function MapScreen() {
       }, 50);
     });
 
-    // Pollution spots layer (visible only when zoomed in)
-    const spotsGroup = L.layerGroup();
+    // Pollution spots layer (always visible now — only real mission points)
+    const spotsGroup = L.layerGroup().addTo(map);
     pollutionSpotsRef.current = spotsGroup;
-
-    const updateSpotsVisibility = () => {
-      const zoom = map.getZoom();
-      if (zoom >= 15) {
-        if (!map.hasLayer(spotsGroup)) map.addLayer(spotsGroup);
-      } else {
-        if (map.hasLayer(spotsGroup)) map.removeLayer(spotsGroup);
-      }
-    };
-    map.on('zoomend', updateSpotsVisibility);
-    updateSpotsVisibility();
 
     mapRef.current = map;
 
@@ -281,45 +270,8 @@ export default function MapScreen() {
     const severityEmoji: Record<string, string> = { GREEN: '✅', YELLOW: '⚠️', RED: '🔴' };
     const heatPoints: [number, number, number][] = [];
 
+    // Render all missions as small precise markers
     zones.forEach(zone => {
-      // Calculate per-zone progress
-      const zoneMissions = missions.filter(m => m.zone_id === zone.id);
-      const cleaned = zoneMissions.filter(m => m.status === 'CLEANED').length;
-      const total = zoneMissions.length;
-      const pct = total > 0 ? Math.round((cleaned / total) * 100) : 0;
-
-      const circle = L.circle([zone.center_lat, zone.center_lng], {
-        radius: zone.radius_m,
-        color: severityColor[zone.severity],
-        fillColor: severityColor[zone.severity],
-        fillOpacity: zone.severity === 'RED' ? 0.18 : zone.severity === 'YELLOW' ? 0.12 : 0.08,
-        weight: 2,
-        opacity: 0.6,
-      }).addTo(map);
-
-      const popupHtml = `
-        <div style="font-family:system-ui;min-width:160px">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-            <span style="font-size:18px">${severityEmoji[zone.severity]}</span>
-            <strong style="font-size:14px">${zone.name}</strong>
-          </div>
-          <div style="background:#f1f5f9;border-radius:8px;padding:8px;margin-bottom:6px">
-            <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px">
-              <span>Убрано</span>
-              <span style="font-weight:700;color:${pct >= 70 ? '#16a34a' : pct >= 30 ? '#ca8a04' : '#dc2626'}">${pct}%</span>
-            </div>
-            <div style="height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden">
-              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#22c55e,#16a34a);border-radius:3px"></div>
-            </div>
-            <div style="font-size:11px;color:#94a3b8;margin-top:3px">${cleaned} из ${total} миссий выполнено</div>
-          </div>
-          <div style="font-size:11px;color:#94a3b8">Осталось: <strong style="color:#334155">${total - cleaned}</strong></div>
-        </div>
-      `;
-      circle.bindPopup(popupHtml);
-      zoneCirclesRef.current.push(circle);
-
-
       // === Real mission spots ===
       const matchedMissions = missions.filter(m => {
         if (m.lat === 0 && m.lng === 0) return false;
@@ -336,11 +288,11 @@ export default function MapScreen() {
         const spotColor = isCleaned ? '#22c55e' : severityColor[zone.severity];
 
         const spot = L.circleMarker([mission.lat, mission.lng], {
-          radius: isCleaned ? 8 : (difficulty === 'HARD' ? 16 : difficulty === 'MODERATE' ? 12 : 9),
+          radius: isCleaned ? 5 : (difficulty === 'HARD' ? 7 : difficulty === 'MODERATE' ? 6 : 5),
           color: spotColor, fillColor: spotColor,
-          fillOpacity: isCleaned ? 0.25 : 0.55,
-          weight: isCleaned ? 1 : 2.5,
-          opacity: isCleaned ? 0.4 : 0.8,
+          fillOpacity: isCleaned ? 0.3 : 0.7,
+          weight: isCleaned ? 1 : 2,
+          opacity: isCleaned ? 0.5 : 0.9,
         });
 
         const popup = L.popup({ minWidth: 220 });
@@ -374,65 +326,11 @@ export default function MapScreen() {
         if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
       });
 
-      // === Generated zone spots with unique locations & descriptions ===
-      const spotCount = Math.max(4, Math.ceil(zone.radius_m / 70));
-      const rng = seededRandom(zone.center_lat * 1000000 + zone.center_lng * 1000);
-
-      for (let i = 0; i < spotCount; i++) {
-        const angle = rng() * 2 * Math.PI;
-        const dist = rng() * 0.85;
-        const spotLat = zone.center_lat + (dist * zone.radius_m / 111000) * Math.cos(angle);
-        const spotLng = zone.center_lng + (dist * zone.radius_m / 111000) * Math.sin(angle) / Math.cos(zone.center_lat * Math.PI / 180);
-        const isCleaned = rng() < (pct / 100);
-        const problemIdx = Math.floor(rng() * detailedProblems.length);
-        const problem = detailedProblems[problemIdx];
-        const spotColor = isCleaned ? '#22c55e' : severityColor[zone.severity];
-        const spotRadius = 6 + rng() * 10;
-
-        const spot = L.circleMarker([spotLat, spotLng], {
-          radius: spotRadius,
-          color: spotColor, fillColor: spotColor,
-          fillOpacity: isCleaned ? 0.2 : 0.5,
-          weight: isCleaned ? 1 : 2,
-          opacity: isCleaned ? 0.3 : 0.7,
-        });
-
-        const popup = L.popup({ minWidth: 220 });
-        spot.bindPopup(popup);
-        spot.on('popupopen', async () => {
-          popup.setContent('<div style="font-family:system-ui;text-align:center;padding:12px"><span style="color:#94a3b8">📍 Определяем адрес...</span></div>');
-          const address = await reverseGeocode(spotLat, spotLng);
-
-          popup.setContent(`
-            <div style="font-family:system-ui;min-width:220px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-                <span style="font-size:22px">${isCleaned ? '✅' : problem.icon}</span>
-                <div>
-                  <strong style="font-size:13px;display:block">${isCleaned ? 'Убрано!' : problem.label}</strong>
-                  <span style="font-size:11px;color:#64748b">📍 ${address}</span>
-                </div>
-              </div>
-              <div style="background:#f8fafc;border-radius:8px;padding:8px;margin-bottom:6px">
-                <p style="font-size:11px;color:#475569;margin:0;line-height:1.4">${isCleaned ? 'Территория очищена волонтёрами. Мусор вывезен и утилизирован.' : problem.detail}</p>
-              </div>
-              ${!isCleaned ? `
-                <div style="background:#fef3c7;border-radius:8px;padding:8px;font-size:11px">
-                  <strong style="color:#92400e">🛠 Что нужно сделать:</strong>
-                  <p style="color:#78350f;margin:4px 0 0;line-height:1.3">${problem.action}</p>
-                </div>
-              ` : `
-                <div style="background:#dcfce7;border-radius:8px;padding:8px;font-size:11px;color:#166534">
-                  ✨ Спасибо волонтёрам за чистый город!
-                </div>
-              `}
-            </div>
-          `);
-        });
-
-        if (pollutionSpotsRef.current) pollutionSpotsRef.current.addLayer(spot);
-      }
-
-      // Heatmap
+      // Heatmap points from real missions
+      const zoneMissions = missions.filter(m => m.zone_id === zone.id);
+      const cleaned = zoneMissions.filter(m => m.status === 'CLEANED').length;
+      const total = zoneMissions.length;
+      const pct = total > 0 ? Math.round((cleaned / total) * 100) : 0;
       const intensity = severityIntensity[zone.severity] ?? 0.5;
       const adjustedIntensity = intensity * (1 - pct / 100 * 0.7);
       const numPoints = Math.ceil((zone.radius_m / 50) * (adjustedIntensity * 3));
@@ -492,11 +390,11 @@ export default function MapScreen() {
       const color = mission.severity_color === 'RED' ? '#ef4444' : '#f97316';
       const icon = L.divIcon({
         className: '',
-        html: `<div style="width:44px;height:44px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px ${color}40, 0 4px 12px ${color}60;animation:pulse 2s infinite;cursor:pointer">
-          <span style="font-size:20px">🆘</span>
+        html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px ${color}40, 0 2px 6px ${color}60;animation:pulse 2s infinite;cursor:pointer">
+          <span style="font-size:11px">🆘</span>
         </div>`,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
       });
       const marker = L.marker([mission.lat, mission.lng], { icon }).addTo(map);
       marker.on('click', () => setSelectedMission(mission));

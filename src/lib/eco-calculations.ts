@@ -4,6 +4,31 @@
  * No random values. No mocks. Only real data.
  */
 
+/** Waste category definition with EP, weight and CO₂ per item */
+export interface WasteCategory {
+  code: string;
+  ep: number;
+  weight_kg: number;
+  co2_kg: number;
+}
+
+export const WASTE_CATEGORIES: Record<string, WasteCategory> = {
+  plastic_pet_1:   { code: 'plastic_pet_1',   ep: 1, weight_kg: 0.025, co2_kg: 0.082 },
+  plastic_hdpe_2:  { code: 'plastic_hdpe_2',  ep: 2, weight_kg: 0.04,  co2_kg: 0.06  },
+  plastic_pvc_3:   { code: 'plastic_pvc_3',   ep: 3, weight_kg: 0.05,  co2_kg: 0.08  },
+  plastic_ldpe_4:  { code: 'plastic_ldpe_4',  ep: 2, weight_kg: 0.008, co2_kg: 0.033 },
+  plastic_pp_5:    { code: 'plastic_pp_5',    ep: 2, weight_kg: 0.02,  co2_kg: 0.04  },
+  plastic_ps_6:    { code: 'plastic_ps_6',    ep: 3, weight_kg: 0.01,  co2_kg: 0.06  },
+  plastic_other_7: { code: 'plastic_other_7', ep: 3, weight_kg: 0.03,  co2_kg: 0.07  },
+  plastic_bag:     { code: 'plastic_bag',     ep: 3, weight_kg: 0.008, co2_kg: 0.033 },
+  paper_cardboard: { code: 'paper_cardboard', ep: 1, weight_kg: 0.01,  co2_kg: 0.025 },
+  metal_waste:     { code: 'metal_waste',     ep: 4, weight_kg: 0.015, co2_kg: 0.042 },
+  glass_waste:     { code: 'glass_waste',     ep: 4, weight_kg: 0.35,  co2_kg: 0.06  },
+  food_waste:      { code: 'food_waste',      ep: 1, weight_kg: 0.05,  co2_kg: 0.01  },
+  cigarette_waste: { code: 'cigarette_waste', ep: 5, weight_kg: 0.001, co2_kg: 0.014 },
+  mixed_waste:     { code: 'mixed_waste',     ep: 3, weight_kg: 0.05,  co2_kg: 0.05  },
+};
+
 export type Period = 'daily' | 'weekly' | 'monthly' | 'all';
 
 /**

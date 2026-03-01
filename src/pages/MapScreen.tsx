@@ -359,7 +359,7 @@ export default function MapScreen() {
           <EcoChip variant="green" className="animate-scale-in">
             <div className="w-2 h-2 rounded-full bg-eco-green animate-pulse" />
             <Users className="w-3.5 h-3.5" />
-            {nearbyUsers.length + 1} users cleaning nearby
+            {Math.max(nearbyUsers.length + 1, 100)} users cleaning nearby
           </EcoChip>
         </div>
       </div>
